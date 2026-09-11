@@ -1,0 +1,6 @@
+{
+  "name": "Desktop Video Clip Processor",
+  "description": "Local desktop video processing workstation for audio extraction, local Whisper transcription, SRT transcript generation, customizable aspect ratio framing, and viral caption clip creation using local FFmpeg.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
