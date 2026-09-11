@@ -147,7 +147,6 @@ export function sanitizeCaptionConfig(config: Partial<CaptionConfig>): CaptionCo
     aspectRatio: config.aspectRatio === '16:9' || config.aspectRatio === '1:1' || config.aspectRatio === 'original'
       ? config.aspectRatio
       : '9:16',
-    framingMode: config.framingMode === 'crop' ? 'crop' : 'face_tracking',
   };
 }
 

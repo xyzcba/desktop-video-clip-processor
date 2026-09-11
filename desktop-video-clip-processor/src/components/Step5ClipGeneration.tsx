@@ -94,9 +94,7 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
             >
               <Sparkles className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
               <span className="font-semibold text-[var(--text-primary)]">
-                {captionConfig.aspectRatio === 'original'
-                  ? 'Original'
-                  : `${captionConfig.aspectRatio} • ${captionConfig.framingMode === 'crop' ? 'Center Crop' : 'Face Tracked'}`}
+                {captionConfig.aspectRatio === 'original' ? 'Original' : captionConfig.aspectRatio}
               </span>
               <span className="text-[var(--text-muted)]">•</span>
               <span>{currentPreset.name}</span>
@@ -273,16 +271,9 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
                   )}
 
                   {isDone && (
-                    <div className="flex items-center gap-1.5">
-                      {job.hasTrackedFace && (
-                        <span className="ws-badge-brand text-[10px] py-0.5 px-1.5" title="Face auto-tracking applied">
-                          Face Tracked
-                        </span>
-                      )}
-                      <span className="ws-badge-success flex items-center gap-1 text-[11px]">
-                        <CheckCircle2 className="w-3 h-3" /> Complete
-                      </span>
-                    </div>
+                    <span className="ws-badge-success flex items-center gap-1 text-[11px]">
+                      <CheckCircle2 className="w-3 h-3" /> Complete
+                    </span>
                   )}
 
                   {job.status === 'waiting' && (

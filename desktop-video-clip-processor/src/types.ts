@@ -20,7 +20,7 @@ export interface VideoMetadata {
   audioChannels?: number;
 }
 
-import { CaptionConfig, WordTimestamp, OutputAspectRatio, FramingMode } from './caption/captionTypes';
+import { CaptionConfig, WordTimestamp, OutputAspectRatio } from './caption/captionTypes';
 export * from './caption/captionTypes';
 
 export interface MasterTranscriptItem {
@@ -89,8 +89,6 @@ export interface ClipJob {
   renderTimeMs?: number;
   hashtags?: string[];
   keywords?: string[];
-  framingMode?: FramingMode;
-  hasTrackedFace?: boolean;
 }
 
 export interface ProjectSession {
@@ -141,6 +139,5 @@ export type AppTheme = 'light' | 'semi-dark';
 
 export * from './caption/captionTypes';
 export * from './caption/captionPresets';
-export * from './tracking/faceTypes';
 
 

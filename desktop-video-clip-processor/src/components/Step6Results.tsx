@@ -222,13 +222,7 @@ export const Step6Results: React.FC<Step6ResultsProps> = ({ session }) => {
                         <div className="flex flex-wrap items-center gap-2.5 text-[11px] ws-muted font-mono pt-0.5">
                           <span>Timeline: {formatSecondsToTimestamp(clip.startSec)} – {formatSecondsToTimestamp(clip.endSec)}</span>
                           {clip.formattedSize && <span>Size: {clip.formattedSize}</span>}
-                          {clip.hasTrackedFace ? (
-                            <span className="text-[var(--brand-text)] font-semibold flex items-center gap-1">
-                              <span>•</span> AI Face Tracked
-                            </span>
-                          ) : (
-                            <span className="text-[var(--success-text)] font-semibold">Framed & Cropped</span>
-                          )}
+                          <span className="text-[var(--success-text)] font-semibold">9:16 Vertical</span>
                         </div>
 
                         {/* Hashtag summary chips */}

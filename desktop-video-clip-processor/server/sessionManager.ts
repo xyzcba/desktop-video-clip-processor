@@ -29,7 +29,6 @@ import { getDownloadsDirectory, getWorkstationTempDir } from './resourcePaths';
 import { DEFAULT_CAPTION_CONFIG, WordTimestamp } from '../src/caption/captionTypes';
 import { generateAssSubtitleFile } from './captionAssGenerator';
 import { sanitizeCaptionConfig } from '../src/caption/captionValidation';
-import { analyzeClipFaceFraming } from './tracking/faceTrackingService';
 
 // Default Windows Downloads directory resolver
 export function resolveDefaultDownloadsDir(): string {
@@ -450,28 +449,6 @@ export async function startClipGeneration(sessionId: string): Promise<void> {
           }
         }
 
-        let customCropFilter: string | undefined = undefined;
-        if (captionConfig.aspectRatio !== 'original' && captionConfig.framingMode !== 'crop') {
-          try {
-            const tracking = await analyzeClipFaceFraming(
-              session.videoFilePath!,
-              job.startSec,
-              job.durationSec,
-              session.video.width,
-              session.video.height,
-              captionConfig.aspectRatio
-            );
-            customCropFilter = tracking.cropFilter;
-            job.framingMode = captionConfig.framingMode || 'face_tracking';
-            job.hasTrackedFace = tracking.hasTrackedFace;
-          } catch (trackErr) {
-            console.warn('[SessionManager] Face tracking fallback to static center crop:', trackErr);
-          }
-        } else {
-          job.framingMode = captionConfig.framingMode || 'crop';
-          job.hasTrackedFace = false;
-        }
-
         try {
           await extractClipWithStyle(
             session.videoFilePath!,
@@ -483,8 +460,7 @@ export async function startClipGeneration(sessionId: string): Promise<void> {
             captionConfig.aspectRatio,
             assSubtitlePath,
             abortController.signal,
-            customFontsDir,
-            customCropFilter
+            customFontsDir
           );
 
           const stat = fs.statSync(outputPath);
@@ -573,28 +549,6 @@ export async function retryClipJob(sessionId: string, clipId: string | number): 
     }
   }
 
-  let customCropFilter: string | undefined = undefined;
-  if (captionConfig.aspectRatio !== 'original' && captionConfig.framingMode !== 'crop') {
-    try {
-      const tracking = await analyzeClipFaceFraming(
-        session.videoFilePath,
-        job.startSec,
-        job.durationSec,
-        session.video.width,
-        session.video.height,
-        captionConfig.aspectRatio
-      );
-      customCropFilter = tracking.cropFilter;
-      job.framingMode = captionConfig.framingMode || 'face_tracking';
-      job.hasTrackedFace = tracking.hasTrackedFace;
-    } catch (trackErr) {
-      console.warn('[SessionManager] Face tracking fallback in retry:', trackErr);
-    }
-  } else {
-    job.framingMode = captionConfig.framingMode || 'crop';
-    job.hasTrackedFace = false;
-  }
-
   try {
     await extractClipWithStyle(
       session.videoFilePath,
@@ -606,8 +560,7 @@ export async function retryClipJob(sessionId: string, clipId: string | number): 
       captionConfig.aspectRatio,
       assSubtitlePath,
       undefined,
-      customFontsDir,
-      customCropFilter
+      customFontsDir
     );
 
     const stat = fs.statSync(outputPath);

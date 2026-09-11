@@ -28,7 +28,6 @@ export type HighlightWordAnimation = 'pop' | 'scale' | 'none';
 export type CaptionAnimation = HighlightWordAnimation | 'fade' | 'slide_up' | 'slide_down';
 
 export type OutputAspectRatio = '9:16' | '16:9' | '1:1' | 'original';
-export type FramingMode = 'crop' | 'face_tracking';
 
 export interface CaptionPosition {
   x: number; // Normalized horizontal position 0.0 to 1.0 (default 0.50 center; can extend outside)
@@ -73,7 +72,6 @@ export interface CaptionConfig {
   textPosition: CaptionPosition;     // Normalized { x, y }
   textUppercase: boolean;            // Default true
   aspectRatio: OutputAspectRatio;    // '9:16' | '16:9' | '1:1' | 'original'
-  framingMode?: FramingMode;         // 'crop' (static center crop) | 'face_tracking' (dynamic face auto-framing)
 }
 
 export interface CaptionGroup {
@@ -112,5 +110,4 @@ export const DEFAULT_CAPTION_CONFIG: CaptionConfig = {
   textPosition: { x: 0.50, y: 0.72 }, // Centered, lower third
   textUppercase: true,
   aspectRatio: '9:16',
-  framingMode: 'face_tracking',
 };

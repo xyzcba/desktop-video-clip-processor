@@ -275,30 +275,23 @@ export async function extractClipWithStyle(
   aspectRatio: OutputAspectRatio = '9:16',
   assSubtitlePath?: string,
   abortSignal?: AbortSignal,
-  fontsDir?: string,
-  customCropFilter?: string
+  fontsDir?: string
 ): Promise<void> {
   const dir = path.dirname(outputClipPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const { targetWidth, targetHeight, cropFilter: defaultCropFilter } = calculateTargetResolution(
-    sourceWidth,
-    sourceHeight,
-    aspectRatio
-  );
-
-  const activeCropFilter = customCropFilter || defaultCropFilter;
-  let videoFilter = activeCropFilter;
+  const { cropFilter } = calculateTargetResolution(sourceWidth, sourceHeight, aspectRatio);
+  let videoFilter = cropFilter;
 
   if (assSubtitlePath && fs.existsSync(assSubtitlePath)) {
     const escapedAss = escapeFfmpegFilterPath(assSubtitlePath);
     if (fontsDir && fs.existsSync(fontsDir)) {
       const escapedFontsDir = escapeFfmpegFilterPath(fontsDir);
-      videoFilter = `${activeCropFilter},ass='${escapedAss}':fontsdir='${escapedFontsDir}'`;
+      videoFilter = `${cropFilter},ass='${escapedAss}':fontsdir='${escapedFontsDir}'`;
     } else {
-      videoFilter = `${activeCropFilter},ass='${escapedAss}'`;
+      videoFilter = `${cropFilter},ass='${escapedAss}'`;
     }
   }
 

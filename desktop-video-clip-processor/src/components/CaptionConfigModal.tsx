@@ -22,14 +22,11 @@ import {
   Type as TypeIcon,
   Eye,
   AlertCircle,
-  ScanFace,
-  Focus,
 } from 'lucide-react';
 import {
   CaptionConfig,
   CaptionPresetId,
   OutputAspectRatio,
-  FramingMode,
   HighlightColorMode,
   DEFAULT_CAPTION_CONFIG,
   WordTimestamp,
@@ -665,81 +662,6 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
                       })}
                     </div>
                   </div>
-
-                  {/* AI Face Tracking & Camera Framing Engine (when not using original aspect ratio) */}
-                  {draft.aspectRatio !== 'original' && (
-                    <div className="space-y-2 pt-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold ws-title flex items-center gap-1.5">
-                          <ScanFace className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
-                          <span>Camera Framing & Auto-Crop Engine</span>
-                        </label>
-                        <span className="text-[10px] font-mono text-[var(--success-text)] bg-[var(--success-subtle)] px-1.5 py-0.5 rounded border border-[var(--success-border)]">
-                          100% Local CPU ONNX
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <button
-                          id="framing-mode-btn-face-tracking"
-                          type="button"
-                          onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              framingMode: 'face_tracking',
-                            }))
-                          }
-                          className={`p-3 rounded-lg border text-left flex flex-col justify-between transition-all ${
-                            (draft.framingMode || 'face_tracking') === 'face_tracking'
-                              ? 'border-[var(--brand-primary)] bg-[var(--brand-subtle)] ring-1 ring-[var(--brand-primary)]'
-                              : 'border-[var(--border-default)] hover:border-[var(--border-strong)] bg-[var(--surface-default)]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <ScanFace className="w-4 h-4 text-[var(--brand-primary)]" />
-                              <span className="text-xs font-bold ws-title">AI Face Tracking</span>
-                            </div>
-                            {(draft.framingMode || 'face_tracking') === 'face_tracking' && (
-                              <Check className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
-                            )}
-                          </div>
-                          <p className="text-[11px] ws-muted mt-1.5 leading-normal">
-                            Smart vertical auto-framing. Automatically tracks the primary speaker across frames, keeping them centered with smooth pans and zero cloud dependency.
-                          </p>
-                        </button>
-
-                        <button
-                          id="framing-mode-btn-crop"
-                          type="button"
-                          onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              framingMode: 'crop',
-                            }))
-                          }
-                          className={`p-3 rounded-lg border text-left flex flex-col justify-between transition-all ${
-                            draft.framingMode === 'crop'
-                              ? 'border-[var(--brand-primary)] bg-[var(--brand-subtle)] ring-1 ring-[var(--brand-primary)]'
-                              : 'border-[var(--border-default)] hover:border-[var(--border-strong)] bg-[var(--surface-default)]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Focus className="w-4 h-4 text-[var(--text-secondary)]" />
-                              <span className="text-xs font-bold ws-title">Fixed Center Crop</span>
-                            </div>
-                            {draft.framingMode === 'crop' && (
-                              <Check className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
-                            )}
-                          </div>
-                          <p className="text-[11px] ws-muted mt-1.5 leading-normal">
-                            Standard static center extraction without camera motion. Best for videos where subjects are already pre-centered in the frame.
-                          </p>
-                        </button>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Caption Position Controls: Action Buttons & Explicit Numeric X / Y */}
                   <div className="space-y-3 pt-2 border-t border-[var(--border-default)]">
@@ -1481,7 +1403,6 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
               >
                 {/* Visual Video Frame Backdrop Mockup */}
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/10 to-black/40 pointer-events-none" />
-
                 <div className="absolute inset-x-0 bottom-2 text-center text-[10px] text-white/30 font-mono tracking-wider pointer-events-none">
                   PREVIEW STAGE
                 </div>

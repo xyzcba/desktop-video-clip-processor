@@ -249,22 +249,6 @@ export function getWorkstationTempDir(): string {
   }
 }
 
-/**
- * Resolves the path to the bundled local ONNX face detection model (version-RFB-320.onnx).
- */
-export function getFaceModelPath(): string {
-  const resPath = getResourcesPath();
-  const candidates = [
-    path.join(resPath, 'models', 'face', 'version-RFB-320.onnx'),
-    path.join(process.cwd(), 'models', 'face', 'version-RFB-320.onnx'),
-    path.join(__dirname, '..', 'models', 'face', 'version-RFB-320.onnx'),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return path.join(process.cwd(), 'models', 'face', 'version-RFB-320.onnx');
-}
-
 export interface ResourceValidationResult {
   allValid: boolean;
   isPackaged: boolean;
