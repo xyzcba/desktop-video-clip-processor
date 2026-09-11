@@ -27,8 +27,10 @@ import {
 import { transcribeAudioFile } from './whisperService';
 import { getDownloadsDirectory, getWorkstationTempDir } from './resourcePaths';
 import { DEFAULT_CAPTION_CONFIG, WordTimestamp } from '../src/caption/captionTypes';
+import { DEFAULT_FRAMING_CONFIG, FramingConfig } from '../src/framing/framingTypes';
 import { generateAssSubtitleFile } from './captionAssGenerator';
 import { sanitizeCaptionConfig } from '../src/caption/captionValidation';
+import { executeFaceTrackingPipeline } from './tracking/trackingPipeline';
 
 // Default Windows Downloads directory resolver
 export function resolveDefaultDownloadsDir(): string {
@@ -98,6 +100,7 @@ export function createSession(): ProjectSession {
       waitingCount: 0,
       totalCount: 0,
     },
+    framingConfig: { ...DEFAULT_FRAMING_CONFIG },
   };
 
   sessions.set(sessionId, session);
@@ -449,6 +452,31 @@ export async function startClipGeneration(sessionId: string): Promise<void> {
           }
         }
 
+        const framingConfig = session.framingConfig || DEFAULT_FRAMING_CONFIG;
+        let trackingCropFilter: string | undefined = undefined;
+
+        if (framingConfig.mode === 'face_tracking') {
+          try {
+            const trackingRes = await executeFaceTrackingPipeline({
+              videoPath: session.videoFilePath!,
+              startSec: job.startSec,
+              durationSec: job.durationSec,
+              sourceWidth: session.video.width,
+              sourceHeight: session.video.height,
+              aspectRatio: captionConfig.aspectRatio,
+              words: clipRelativeWords,
+              workingDir: session.workingDir,
+              clipId: i + 1,
+              abortSignal: abortController.signal,
+            });
+            if (trackingRes.hasFaces && trackingRes.cropFilter) {
+              trackingCropFilter = trackingRes.cropFilter;
+            }
+          } catch (trackErr) {
+            console.error(`Face tracking failed for clip ${i + 1}, falling back to standard framing:`, trackErr);
+          }
+        }
+
         try {
           await extractClipWithStyle(
             session.videoFilePath!,
@@ -460,7 +488,9 @@ export async function startClipGeneration(sessionId: string): Promise<void> {
             captionConfig.aspectRatio,
             assSubtitlePath,
             abortController.signal,
-            customFontsDir
+            customFontsDir,
+            trackingCropFilter,
+            framingConfig
           );
 
           const stat = fs.statSync(outputPath);
@@ -549,6 +579,30 @@ export async function retryClipJob(sessionId: string, clipId: string | number): 
     }
   }
 
+  const framingConfig = session.framingConfig || DEFAULT_FRAMING_CONFIG;
+  let trackingCropFilter: string | undefined = undefined;
+
+  if (framingConfig.mode === 'face_tracking') {
+    try {
+      const trackingRes = await executeFaceTrackingPipeline({
+        videoPath: session.videoFilePath!,
+        startSec: job.startSec,
+        durationSec: job.durationSec,
+        sourceWidth: session.video.width,
+        sourceHeight: session.video.height,
+        aspectRatio: captionConfig.aspectRatio,
+        words: clipRelativeWords,
+        workingDir: session.workingDir,
+        clipId: String(clipId),
+      });
+      if (trackingRes.hasFaces && trackingRes.cropFilter) {
+        trackingCropFilter = trackingRes.cropFilter;
+      }
+    } catch (trackErr) {
+      console.error(`Face tracking retry failed for clip ${clipId}, falling back to standard framing:`, trackErr);
+    }
+  }
+
   try {
     await extractClipWithStyle(
       session.videoFilePath,
@@ -560,7 +614,9 @@ export async function retryClipJob(sessionId: string, clipId: string | number): 
       captionConfig.aspectRatio,
       assSubtitlePath,
       undefined,
-      customFontsDir
+      customFontsDir,
+      trackingCropFilter,
+      framingConfig
     );
 
     const stat = fs.statSync(outputPath);
@@ -584,6 +640,21 @@ export function setSessionCaptionConfig(sessionId: string, config: any): Project
   const session = getSession(sessionId);
   if (!session) throw new Error(`Session ${sessionId} not found`);
   session.captionConfig = sanitizeCaptionConfig(config);
+  return session;
+}
+
+/**
+ * Updates framing configuration on session
+ */
+export function setSessionFramingConfig(sessionId: string, config: any): ProjectSession {
+  const session = getSession(sessionId);
+  if (!session) throw new Error(`Session ${sessionId} not found`);
+  session.framingConfig = {
+    mode: config?.mode === 'face_tracking' ? 'face_tracking' : 'crop',
+    cropPositionX: typeof config?.cropPositionX === 'number' ? Math.max(0, Math.min(1, config.cropPositionX)) : 0.5,
+    cropPositionY: typeof config?.cropPositionY === 'number' ? Math.max(0, Math.min(1, config.cropPositionY)) : 0.5,
+    cropZoom: typeof config?.cropZoom === 'number' ? Math.max(1, Math.min(3, config.cropZoom)) : 1.0,
+  };
   return session;
 }
 

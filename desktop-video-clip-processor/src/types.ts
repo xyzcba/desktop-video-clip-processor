@@ -22,6 +22,8 @@ export interface VideoMetadata {
 
 import { CaptionConfig, WordTimestamp, OutputAspectRatio } from './caption/captionTypes';
 export * from './caption/captionTypes';
+import { FramingConfig } from './framing/framingTypes';
+export * from './framing/framingTypes';
 
 export interface MasterTranscriptItem {
   id: number;
@@ -89,6 +91,7 @@ export interface ClipJob {
   renderTimeMs?: number;
   hashtags?: string[];
   keywords?: string[];
+  framingConfig?: FramingConfig;
 }
 
 export interface ProjectSession {
@@ -126,6 +129,7 @@ export interface ProjectSession {
     totalCount: number;
   };
   captionConfig?: CaptionConfig;
+  framingConfig?: FramingConfig;
 }
 
 export type AppStep =
@@ -139,5 +143,6 @@ export type AppTheme = 'light' | 'semi-dark';
 
 export * from './caption/captionTypes';
 export * from './caption/captionPresets';
+export * from './framing/framingTypes';
 
 

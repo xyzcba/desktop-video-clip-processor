@@ -24,6 +24,7 @@ import {
   cleanupSessionTemp,
   resolveDefaultDownloadsDir,
   setSessionCaptionConfig,
+  setSessionFramingConfig,
 } from './server/sessionManager';
 import { getWorkstationTempDir, validateAllResources } from './server/resourcePaths';
 import { validateViralClipsJson } from './src/utils/jsonValidator';
@@ -422,6 +423,21 @@ app.post('/api/caption/config', (req, res) => {
       return;
     }
     const session = setSessionCaptionConfig(sessionId, captionConfig);
+    res.json(session);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 15c. Framing Configuration
+app.post('/api/framing/config', (req, res) => {
+  try {
+    const { sessionId, framingConfig } = req.body;
+    if (!sessionId) {
+      res.status(400).json({ error: 'sessionId is required' });
+      return;
+    }
+    const session = setSessionFramingConfig(sessionId, framingConfig);
     res.json(session);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

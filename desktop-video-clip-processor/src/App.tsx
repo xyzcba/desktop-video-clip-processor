@@ -11,6 +11,7 @@ import { DesktopPackagingModal } from './components/DesktopPackagingModal';
 import { SystemInfoModal } from './components/SystemInfoModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppStep, ProjectSession, AppTheme, CaptionConfig } from './types';
+import { FramingConfig } from './framing/framingTypes';
 
 // Helper to normalize session responses that might be wrapped in { session: ... }
 function normalizeSession(data: any): ProjectSession | null {
@@ -261,7 +262,8 @@ export default function App() {
   const handleApplyClipsJson = async (
     rawJson: string,
     maxDurationSec: number,
-    newCaptionConfig?: CaptionConfig
+    newCaptionConfig?: CaptionConfig,
+    newFramingConfig?: FramingConfig
   ) => {
     if (!session?.sessionId) return;
     setApiError(null);
@@ -274,6 +276,17 @@ export default function App() {
           body: JSON.stringify({
             sessionId: session.sessionId,
             captionConfig: newCaptionConfig,
+          }),
+        });
+      }
+
+      if (newFramingConfig) {
+        await fetch('/api/framing/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            framingConfig: newFramingConfig,
           }),
         });
       }
@@ -406,6 +419,27 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to update caption configuration:', err);
+    }
+  };
+
+  const handleUpdateFramingConfig = async (config: FramingConfig) => {
+    if (!session?.sessionId) return;
+    try {
+      const res = await fetch('/api/framing/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          framingConfig: config,
+        }),
+      });
+      if (res.ok) {
+        const raw = await res.json();
+        const updated = normalizeSession(raw);
+        if (updated) setSession(updated);
+      }
+    } catch (err) {
+      console.error('Failed to update framing configuration:', err);
     }
   };
 
@@ -557,6 +591,7 @@ export default function App() {
               session={session}
               onApplyClipsJson={handleApplyClipsJson}
               onUpdateCaptionConfig={handleUpdateCaptionConfig}
+              onUpdateFramingConfig={handleUpdateFramingConfig}
             />
           )}
 

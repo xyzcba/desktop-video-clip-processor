@@ -15,26 +15,52 @@ import {
   Edit3,
 } from 'lucide-react';
 import { ProjectSession, ValidationResult, CaptionConfig, DEFAULT_CAPTION_CONFIG } from '../types';
+import { FramingConfig, DEFAULT_FRAMING_CONFIG } from '../framing/framingTypes';
 import { getCaptionPreset } from '../caption/captionPresets';
 import { generateLlmPrompt } from '../utils/promptGenerator';
 import { validateViralClipsJson } from '../utils/jsonValidator';
 import { formatSecondsToTimestamp } from '../utils/timestamps';
 import { safeCopyToClipboard } from '../utils/clipboard';
 import { CaptionConfigModal } from './CaptionConfigModal';
+import { FramingSelector } from './FramingSelector';
 
 interface Step4ViralJsonProps {
   session: ProjectSession;
-  onApplyClipsJson: (rawJson: string, maxDurationSec: number, newCaptionConfig?: CaptionConfig) => void;
+  onApplyClipsJson: (
+    rawJson: string,
+    maxDurationSec: number,
+    newCaptionConfig?: CaptionConfig,
+    newFramingConfig?: FramingConfig
+  ) => void;
   onUpdateCaptionConfig?: (config: CaptionConfig) => Promise<void> | void;
+  onUpdateFramingConfig?: (config: FramingConfig) => Promise<void> | void;
 }
 
 export const Step4ViralJson: React.FC<Step4ViralJsonProps> = ({
   session,
   onApplyClipsJson,
   onUpdateCaptionConfig,
+  onUpdateFramingConfig,
 }) => {
   const [isCaptionModalOpen, setIsCaptionModalOpen] = useState(false);
   const captionConfig = session?.captionConfig || DEFAULT_CAPTION_CONFIG;
+  const [framingDraft, setFramingDraft] = useState<FramingConfig>(
+    session.framingConfig || DEFAULT_FRAMING_CONFIG
+  );
+
+  useEffect(() => {
+    if (session.framingConfig) {
+      setFramingDraft(session.framingConfig);
+    }
+  }, [session.framingConfig]);
+
+  const handleFramingChange = (newConfig: FramingConfig) => {
+    setFramingDraft(newConfig);
+    if (onUpdateFramingConfig) {
+      onUpdateFramingConfig(newConfig);
+    }
+  };
+
   const currentPreset = getCaptionPreset(captionConfig.preset);
   const initialDuration =
     session.recommendedClipDurationSec || session.maxClipDurationSec || 60;
@@ -363,12 +389,22 @@ export const Step4ViralJson: React.FC<Step4ViralJsonProps> = ({
                     className="ws-btn-primary"
                   >
                     <Sliders className="w-3.5 h-3.5" />
-                    <span>Configure Framing & Generate {validation.clips.length} Clips</span>
+                    <span>Configure Captions & Generate {validation.clips.length} Clips</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}
             </div>
+
+            {/* Dedicated Framing Configuration */}
+            {validation.isValid && (
+              <div className="pt-2">
+                <FramingSelector
+                  config={framingDraft}
+                  onChange={handleFramingChange}
+                />
+              </div>
+            )}
 
             {/* Error List */}
             {validation.errors.length > 0 && (
@@ -455,7 +491,7 @@ export const Step4ViralJson: React.FC<Step4ViralJsonProps> = ({
             await onUpdateCaptionConfig(savedCfg);
           }
           setIsCaptionModalOpen(false);
-          onApplyClipsJson(jsonInput, recommendedClipDurationSec, savedCfg);
+          onApplyClipsJson(jsonInput, recommendedClipDurationSec, savedCfg, framingDraft);
         }}
         clipCount={validation?.clips?.length}
       />

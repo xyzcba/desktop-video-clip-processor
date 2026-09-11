@@ -97,6 +97,10 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
                 {captionConfig.aspectRatio === 'original' ? 'Original' : captionConfig.aspectRatio}
               </span>
               <span className="text-[var(--text-muted)]">•</span>
+              <span className="font-medium text-[var(--text-primary)]">
+                {session?.framingConfig?.mode === 'face_tracking' ? 'Face Tracking' : 'Crop'}
+              </span>
+              <span className="text-[var(--text-muted)]">•</span>
               <span>{currentPreset.name}</span>
               <span className="text-[var(--text-muted)]">•</span>
               <span className={captionConfig.enabled !== false ? 'text-[var(--success-text)] font-medium' : 'ws-muted'}>

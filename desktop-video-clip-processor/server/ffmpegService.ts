@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { VideoMetadata } from '../src/types';
 import { OutputAspectRatio } from '../src/caption/captionTypes';
+import { FramingConfig } from '../src/framing/framingTypes';
 import { formatSecondsToTimestamp, formatDurationHuman, formatBytes } from '../src/utils/timestamps';
 import { getFfmpegBinary, getFfprobeBinary } from './resourcePaths';
 
@@ -217,27 +218,31 @@ export async function extractAudioFromVideo(
 }
 
 /**
- * Calculates target output resolution and FFmpeg crop/scale filter for a given aspect ratio.
+ * Calculates target output resolution and FFmpeg crop/scale filter for a given aspect ratio and optional framing config.
  */
 export function calculateTargetResolution(
   sourceWidth: number,
   sourceHeight: number,
-  aspectRatio: OutputAspectRatio = '9:16'
+  aspectRatio: OutputAspectRatio = '9:16',
+  framingConfig?: FramingConfig
 ): { targetWidth: number; targetHeight: number; cropFilter: string } {
   const sW = Math.max(2, sourceWidth || 1920);
   const sH = Math.max(2, sourceHeight || 1080);
 
+  const posX = framingConfig?.cropPositionX !== undefined ? Math.max(0, Math.min(1, framingConfig.cropPositionX)) : 0.5;
+  const posY = framingConfig?.cropPositionY !== undefined ? Math.max(0, Math.min(1, framingConfig.cropPositionY)) : 0.5;
+
   if (aspectRatio === '16:9') {
     const targetWidth = sW >= 1920 ? 1920 : sW >= 1280 ? 1280 : Math.round(sW / 2) * 2;
     const targetHeight = Math.round((targetWidth * 9) / 16 / 2) * 2;
-    const cropFilter = `crop=w='min(iw,ih*16/9)':h='min(ih,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2',scale=${targetWidth}:${targetHeight}`;
+    const cropFilter = `crop=w='min(iw,ih*16/9)':h='min(ih,iw*9/16)':x='(iw-ow)*${posX}':y='(ih-oh)*${posY}',scale=${targetWidth}:${targetHeight}`;
     return { targetWidth, targetHeight, cropFilter };
   }
 
   if (aspectRatio === '1:1') {
     const minDim = Math.min(sW, sH);
     const targetDim = minDim >= 1080 ? 1080 : minDim >= 720 ? 720 : Math.round(minDim / 2) * 2;
-    const cropFilter = `crop=w='min(iw,ih)':h='min(iw,ih)':x='(iw-ow)/2':y='(ih-oh)/2',scale=${targetDim}:${targetDim}`;
+    const cropFilter = `crop=w='min(iw,ih)':h='min(iw,ih)':x='(iw-ow)*${posX}':y='(ih-oh)*${posY}',scale=${targetDim}:${targetDim}`;
     return { targetWidth: targetDim, targetHeight: targetDim, cropFilter };
   }
 
@@ -251,7 +256,7 @@ export function calculateTargetResolution(
   // Default: 9:16 vertical
   const targetHeight = sH >= 1080 ? 1920 : sH >= 720 ? 1280 : Math.round(sH * 16 / 9 / 2) * 2;
   const targetWidth = Math.round((targetHeight * 9) / 16 / 2) * 2;
-  const cropFilter = `crop=w='min(iw,ih*9/16)':h='min(ih,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2',scale=${targetWidth}:${targetHeight}`;
+  const cropFilter = `crop=w='min(iw,ih*9/16)':h='min(ih,iw*16/9)':x='(iw-ow)*${posX}':y='(ih-oh)*${posY}',scale=${targetWidth}:${targetHeight}`;
   return { targetWidth, targetHeight, cropFilter };
 }
 
@@ -263,7 +268,7 @@ export function escapeFfmpegFilterPath(filePath: string): string {
 }
 
 /**
- * Extracts a clip with specified aspect ratio and optional burned-in ASS subtitles
+ * Extracts a clip with specified aspect ratio, dynamic face tracking or manual crop, and optional burned-in ASS subtitles
  */
 export async function extractClipWithStyle(
   sourceVideoPath: string,
@@ -275,23 +280,36 @@ export async function extractClipWithStyle(
   aspectRatio: OutputAspectRatio = '9:16',
   assSubtitlePath?: string,
   abortSignal?: AbortSignal,
-  fontsDir?: string
+  fontsDir?: string,
+  customCropFilter?: string,
+  framingConfig?: FramingConfig
 ): Promise<void> {
   const dir = path.dirname(outputClipPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const { cropFilter } = calculateTargetResolution(sourceWidth, sourceHeight, aspectRatio);
-  let videoFilter = cropFilter;
+  const { targetWidth, targetHeight, cropFilter: defaultCropFilter } = calculateTargetResolution(
+    sourceWidth,
+    sourceHeight,
+    aspectRatio,
+    framingConfig
+  );
+
+  let videoFilter: string;
+  if (customCropFilter) {
+    videoFilter = `${customCropFilter},scale=${targetWidth}:${targetHeight}`;
+  } else {
+    videoFilter = defaultCropFilter;
+  }
 
   if (assSubtitlePath && fs.existsSync(assSubtitlePath)) {
     const escapedAss = escapeFfmpegFilterPath(assSubtitlePath);
     if (fontsDir && fs.existsSync(fontsDir)) {
       const escapedFontsDir = escapeFfmpegFilterPath(fontsDir);
-      videoFilter = `${cropFilter},ass='${escapedAss}':fontsdir='${escapedFontsDir}'`;
+      videoFilter = `${videoFilter},ass='${escapedAss}':fontsdir='${escapedFontsDir}'`;
     } else {
-      videoFilter = `${cropFilter},ass='${escapedAss}'`;
+      videoFilter = `${videoFilter},ass='${escapedAss}'`;
     }
   }
 
