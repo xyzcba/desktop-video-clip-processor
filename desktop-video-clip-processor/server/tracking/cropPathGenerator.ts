@@ -4,38 +4,46 @@ import { TargetSpeakerTrajectoryPoint } from './speakerSelector';
 import { CropKeyframe } from './trackingTypes';
 import { OutputAspectRatio } from '../../src/caption/captionTypes';
 
-export type EasingMode = 'linear' | 'easeInOut' | 'easeOut' | 'easeOutCubic' | 'easeOutExpo';
-
-const INTERPOLATION_FPS = 10; // 10 keyframes per second baseline sampling
-const LERP_DURATION_SEC = 0.5; // Tuned duration for smooth small/moderate camera repositioning
-const SNAP_DISTANCE_RATIO = 0.66; // Movements exceeding ~66% of crop dimension snap immediately
-const LERP_EASING: EasingMode = 'easeOutCubic'; // Default easing mode: fast start, smooth natural settling
+// ============================================================================
+// CAMERA MOVEMENT & SMOOTHING CONFIGURATION (EMA + VELOCITY LIMIT MODEL)
+// ============================================================================
+/**
+ * Sampling rate for crop keyframes emitted to FFmpeg sendcmd (keyframes per second).
+ */
+export const INTERPOLATION_FPS = 10;
 
 /**
- * Evaluates standard normalized easing curves mapping t in [0, 1] to [0, 1]
+ * Smoothing factor for raw face targets (0 < alpha <= 1).
+ * Evaluated at each INTERPOLATION_FPS timestep (dt = 0.1s).
+ * - Lower values (e.g. 0.15 - 0.25) create softer, more damped following.
+ * - Higher values (e.g. 0.30 - 0.45) increase responsiveness.
  */
-export function evaluateEasing(mode: EasingMode, t: number): number {
-  const clamped = Math.max(0, Math.min(1, t));
-  switch (mode) {
-    case 'linear':
-      return clamped;
-    case 'easeOut':
-      // Quadratic ease-out: 1 - (1 - t)^2
-      return 1 - Math.pow(1 - clamped, 2);
-    case 'easeOutCubic':
-      // Cubic ease-out: 1 - (1 - t)^3 (starts fast, smooth natural settling)
-      return 1 - Math.pow(1 - clamped, 3);
-    case 'easeOutExpo':
-      // Exponential ease-out: 1 - 2^(-10t)
-      return clamped === 0 ? 0 : clamped === 1 ? 1 : 1 - Math.pow(2, -10 * clamped);
-    case 'easeInOut':
-      // Cubic ease-in-out S-curve
-      return clamped < 0.5
-        ? 4 * clamped * clamped * clamped
-        : 1 - Math.pow(-2 * clamped + 2, 3) / 2;
-    default:
-      return 1 - Math.pow(1 - clamped, 3);
-  }
+export const TARGET_EMA_ALPHA = 0.30;
+
+/**
+ * Maximum camera movement speed in pixels per second.
+ * Constrains camera pan speed so small/moderate movements never whip dizzyingly.
+ */
+export const MAX_VELOCITY_PX_PER_SEC = 500;
+
+/**
+ * Large movement threshold as a ratio of the reference crop dimension.
+ * When a target jumps further than (refDimension * SNAP_DISTANCE_RATIO) pixels,
+ * the camera immediately snaps to the new position instead of slowly traversing.
+ */
+export const SNAP_DISTANCE_RATIO = 0.66;
+
+/**
+ * Deadband threshold in pixels to filter out detection micro-jitter.
+ * Target adjustments below this distance are ignored so the camera remains stable.
+ */
+export const DEADBAND_PIXELS = 24;
+
+export interface CameraMotionOptions {
+  emaAlpha?: number;
+  maxVelocityPxPerSec?: number;
+  snapDistanceRatio?: number;
+  deadbandPixels?: number;
 }
 
 /**
@@ -71,23 +79,14 @@ export function calculateCropDimensions(
   return { cropWidth, cropHeight };
 }
 
-interface CameraMovementEvent {
-  timestamp: number;
-  startX: number;
-  startY: number;
-  targetX: number;
-  targetY: number;
-  isSnap: boolean;
-  duration: number; // 0 for snap, LERP_DURATION_SEC for small/moderate lerp
-}
-
 /**
  * Generates crop keyframes and a sendcmd command file for FFmpeg.
- * Implements dual-mode camera response:
- * - Small/moderate movements interpolate smoothly over ~0.5s using configurable easing (default easeOutCubic)
- * - Continuous tracking: when a new waypoint arrives while moving, smoothly redirects from current position
- * - Large movements (exceeding distance threshold) SNAP immediately
- * - Deadband filters out detection noise/jitter
+ * Implements a continuous EMA + velocity-limited camera movement model:
+ * - Raw face targets are smoothed using EMA
+ * - Camera movement is constrained by a maximum velocity so it follows responsively and settles naturally
+ * - Continuous camera position & velocity maintained over time (no fixed-duration event boundaries)
+ * - Large movements (exceeding dimension-scaled distance threshold) SNAP immediately
+ * - Deadband suppresses detection micro-jitter
  */
 export function generateSmoothCropPath(
   trajectory: TargetSpeakerTrajectoryPoint[],
@@ -97,7 +96,7 @@ export function generateSmoothCropPath(
   aspectRatio: OutputAspectRatio,
   workingDir: string,
   clipId: string | number,
-  easingMode: EasingMode = LERP_EASING
+  options?: CameraMotionOptions
 ): { keyframes: CropKeyframe[]; sendcmdFilePath: string; cropFilter: string } {
   const { cropWidth, cropHeight } = calculateCropDimensions(sourceWidth, sourceHeight, aspectRatio);
 
@@ -126,7 +125,7 @@ export function generateSmoothCropPath(
       // Desired vertical headroom: face center sits at ~40% from top of crop box
       const idealY = facePxY - cropHeight * 0.40;
 
-      // Clamp strictly inside source bounds
+      // Clamp strictly inside source bounds and align to even numbers
       const clampedX = Math.max(0, Math.min(maxX, Math.round(idealX / 2) * 2));
       const clampedY = Math.max(0, Math.min(maxY, Math.round(idealY / 2) * 2));
 
@@ -138,131 +137,106 @@ export function generateSmoothCropPath(
     })
     .sort((a, b) => a.timestamp - b.timestamp);
 
+  // Resolve tuning parameters
+  const emaAlpha = options?.emaAlpha ?? TARGET_EMA_ALPHA;
+  const maxVelocity = options?.maxVelocityPxPerSec ?? MAX_VELOCITY_PX_PER_SEC;
+  const snapRatio = options?.snapDistanceRatio ?? SNAP_DISTANCE_RATIO;
+  const baseDeadband = options?.deadbandPixels ?? DEADBAND_PIXELS;
+
   // Dynamic distance thresholds scaled to actual crop & resolution dimensions
   const refDimension = Math.min(cropWidth, cropHeight);
   // Deadband: ~4% of crop dimension (e.g. 24px on 608px 1080p vertical crop)
-  const deadbandPixels = Math.max(16, Math.round(refDimension * 0.04));
+  const deadband = Math.max(baseDeadband, Math.round(refDimension * 0.04));
   // Large movement threshold: ~66% of crop dimension (e.g. ~401px on 608px 1080p vertical crop)
-  const largeMovementThreshold = Math.round(refDimension * SNAP_DISTANCE_RATIO);
+  const largeMovementThreshold = Math.round(refDimension * snapRatio);
 
-  // Helper to sample crop coordinates at any continuous timestamp t given current events list
-  function getCropAtTime(
-    t: number,
-    eventsList: CameraMovementEvent[],
-    easing: EasingMode
-  ): { x: number; y: number } {
-    let activeEvent = eventsList[0];
-    for (let i = eventsList.length - 1; i >= 0; i--) {
-      if (eventsList[i].timestamp <= t) {
-        activeEvent = eventsList[i];
-        break;
-      }
-    }
-
-    if (activeEvent.isSnap || activeEvent.duration <= 0) {
-      return { x: activeEvent.targetX, y: activeEvent.targetY };
-    }
-
-    const elapsed = t - activeEvent.timestamp;
-    if (elapsed >= activeEvent.duration) {
-      return { x: activeEvent.targetX, y: activeEvent.targetY };
-    }
-
-    const prog = Math.max(0, Math.min(1, elapsed / activeEvent.duration));
-    const eased = evaluateEasing(easing, prog);
-
-    const curX = activeEvent.startX + (activeEvent.targetX - activeEvent.startX) * eased;
-    const curY = activeEvent.startY + (activeEvent.targetY - activeEvent.startY) * eased;
-    return { x: curX, y: curY };
-  }
-
-  // 2. Build camera movement timeline (Snap vs Continuous Lerp vs Deadband)
-  const events: CameraMovementEvent[] = [];
-  const initialTargetX = rawWaypoints[0].targetX;
-  const initialTargetY = rawWaypoints[0].targetY;
-
-  // Initial position at t = 0
-  events.push({
-    timestamp: 0,
-    startX: initialTargetX,
-    startY: initialTargetY,
-    targetX: initialTargetX,
-    targetY: initialTargetY,
-    isSnap: true,
-    duration: 0,
-  });
-
-  for (let i = 1; i < rawWaypoints.length; i++) {
-    const wp = rawWaypoints[i];
-
-    // CONTINUOUS MOVEMENT: Evaluate camera's actual interpolated position at this timestamp
-    const currentPos = getCropAtTime(wp.timestamp, events, easingMode);
-
-    // Calculate required distance from current camera position to the new target
-    const dx = wp.targetX - currentPos.x;
-    const dy = wp.targetY - currentPos.y;
-    const distance = Math.hypot(dx, dy);
-
-    // Deadband check: ignore micro-movements / jitter
-    if (distance <= deadbandPixels) {
-      continue;
-    }
-
-    if (distance >= largeMovementThreshold) {
-      // Large movement: SNAP immediately to new target (no slow pan across the frame)
-      events.push({
-        timestamp: wp.timestamp,
-        startX: wp.targetX,
-        startY: wp.targetY,
-        targetX: wp.targetX,
-        targetY: wp.targetY,
-        isSnap: true,
-        duration: 0,
-      });
-    } else {
-      // Small/moderate movement: smoothly redirect toward the new target starting from
-      // the actual interpolated current camera position (preventing micro-snaps / jump-backs)
-      events.push({
-        timestamp: wp.timestamp,
-        startX: currentPos.x,
-        startY: currentPos.y,
-        targetX: wp.targetX,
-        targetY: wp.targetY,
-        isSnap: false,
-        duration: LERP_DURATION_SEC,
-      });
-    }
-  }
-
-  // 3. Collect keyframe timestamps: base 10 FPS grid + event boundaries for precision
-  const timestampSet = new Set<number>();
-  const totalFrames = Math.ceil(clipDurationSec * INTERPOLATION_FPS);
+  // 2. Continuous simulation loop with EMA smoothing + velocity limiting + large-movement snap
   const dt = 1.0 / INTERPOLATION_FPS;
-
-  for (let f = 0; f <= totalFrames; f++) {
-    timestampSet.add(Math.round(f * dt * 1000) / 1000);
-  }
-
-  for (const ev of events) {
-    const tStart = Math.round(ev.timestamp * 1000) / 1000;
-    if (tStart <= clipDurationSec) {
-      timestampSet.add(tStart);
-    }
-    if (!ev.isSnap && ev.duration > 0) {
-      const tEnd = Math.round((ev.timestamp + ev.duration) * 1000) / 1000;
-      if (tEnd <= clipDurationSec) {
-        timestampSet.add(tEnd);
-      }
-    }
-  }
-
-  const sortedTimestamps = Array.from(timestampSet).sort((a, b) => a - b);
+  const totalFrames = Math.ceil(clipDurationSec * INTERPOLATION_FPS);
   const keyframes: CropKeyframe[] = [];
 
-  for (const t of sortedTimestamps) {
-    const { x, y } = getCropAtTime(t, events, easingMode);
-    const finalX = Math.max(0, Math.min(maxX, Math.round(x / 2) * 2));
-    const finalY = Math.max(0, Math.min(maxY, Math.round(y / 2) * 2));
+  // Initialize state with first waypoint
+  let currentCameraX = rawWaypoints[0].targetX;
+  let currentCameraY = rawWaypoints[0].targetY;
+  let currentVx = 0;
+  let currentVy = 0;
+
+  let smoothedTargetX = currentCameraX;
+  let smoothedTargetY = currentCameraY;
+  let activeRawTargetX = currentCameraX;
+  let activeRawTargetY = currentCameraY;
+
+  let wpIdx = 0;
+
+  for (let f = 0; f <= totalFrames; f++) {
+    const t = Math.round(f * dt * 1000) / 1000;
+
+    // Check for newly arrived waypoints up to current time t
+    while (wpIdx + 1 < rawWaypoints.length && rawWaypoints[wpIdx + 1].timestamp <= t) {
+      wpIdx++;
+      const nextWp = rawWaypoints[wpIdx];
+      const candX = nextWp.targetX;
+      const candY = nextWp.targetY;
+
+      // Distance from camera's actual current continuous position
+      const distFromCamera = Math.hypot(candX - currentCameraX, candY - currentCameraY);
+
+      if (distFromCamera >= largeMovementThreshold) {
+        // LARGE MOVEMENT: Snap immediately!
+        currentCameraX = candX;
+        currentCameraY = candY;
+        smoothedTargetX = candX;
+        smoothedTargetY = candY;
+        activeRawTargetX = candX;
+        activeRawTargetY = candY;
+        currentVx = 0;
+        currentVy = 0;
+      } else {
+        // SMALL/MODERATE MOVEMENT: Check deadband against active raw target
+        const distFromActive = Math.hypot(candX - activeRawTargetX, candY - activeRawTargetY);
+        if (distFromActive > deadband) {
+          activeRawTargetX = candX;
+          activeRawTargetY = candY;
+        }
+      }
+    }
+
+    // Step continuous dynamics (for f > 0)
+    if (f > 0) {
+      // 1. Update smoothed target using EMA
+      smoothedTargetX += (activeRawTargetX - smoothedTargetX) * emaAlpha;
+      smoothedTargetY += (activeRawTargetY - smoothedTargetY) * emaAlpha;
+
+      // 2. Constrain camera movement toward smoothed target by maximum velocity
+      const dx = smoothedTargetX - currentCameraX;
+      const dy = smoothedTargetY - currentCameraY;
+      const distToTarget = Math.hypot(dx, dy);
+
+      if (distToTarget <= 0.5) {
+        currentCameraX = smoothedTargetX;
+        currentCameraY = smoothedTargetY;
+        currentVx = 0;
+        currentVy = 0;
+      } else {
+        const maxStepDist = maxVelocity * dt;
+        if (distToTarget <= maxStepDist) {
+          currentCameraX = smoothedTargetX;
+          currentCameraY = smoothedTargetY;
+          currentVx = dx / dt;
+          currentVy = dy / dt;
+        } else {
+          const stepRatio = maxStepDist / distToTarget;
+          currentCameraX += dx * stepRatio;
+          currentCameraY += dy * stepRatio;
+          currentVx = (dx / distToTarget) * maxVelocity;
+          currentVy = (dy / distToTarget) * maxVelocity;
+        }
+      }
+    }
+
+    // Clamp inside frame boundaries and align to even pixels for encoder
+    const finalX = Math.max(0, Math.min(maxX, Math.round(currentCameraX / 2) * 2));
+    const finalY = Math.max(0, Math.min(maxY, Math.round(currentCameraY / 2) * 2));
 
     keyframes.push({
       timestamp: t,
