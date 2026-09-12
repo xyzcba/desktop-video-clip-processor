@@ -22,6 +22,12 @@ import {
   Type as TypeIcon,
   Eye,
   AlertCircle,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Scan,
+  Crop as CropIcon,
 } from 'lucide-react';
 import {
   CaptionConfig,
@@ -44,15 +50,20 @@ import {
   computeCaptionGroupLayout,
   getCompositionDimensions,
 } from '../caption/captionLayoutModel';
+import { FramingConfig, DEFAULT_FRAMING_CONFIG } from '../framing/framingTypes';
+import { FramingSelector } from './FramingSelector';
 
 interface CaptionConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   config: CaptionConfig;
+  framingConfig?: FramingConfig;
+  onUpdateFramingConfig?: (newConfig: FramingConfig) => Promise<void> | void;
+  videoSrc?: string;
   sourceVideoWidth?: number;
   sourceVideoHeight?: number;
-  onSave: (newConfig: CaptionConfig) => Promise<void> | void;
-  onApplyAndProceed?: (savedConfig: CaptionConfig) => Promise<void> | void;
+  onSave: (newConfig: CaptionConfig, newFramingConfig?: FramingConfig) => Promise<void> | void;
+  onApplyAndProceed?: (savedConfig: CaptionConfig, savedFramingConfig?: FramingConfig) => Promise<void> | void;
   isSaving?: boolean;
   applyButtonLabel?: string;
   clipCount?: number;
@@ -82,10 +93,20 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function formatSeconds(sec: number): string {
+  if (isNaN(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
   isOpen,
   onClose,
   config: initialConfig,
+  framingConfig: initialFramingConfig,
+  onUpdateFramingConfig,
+  videoSrc,
   sourceVideoWidth,
   sourceVideoHeight,
   onSave,
@@ -97,6 +118,19 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
   const [draft, setDraft] = useState<CaptionConfig>(() =>
     sanitizeCaptionConfig(initialConfig || DEFAULT_CAPTION_CONFIG)
   );
+  const [framingDraft, setFramingDraft] = useState<FramingConfig>(() =>
+    initialFramingConfig || DEFAULT_FRAMING_CONFIG
+  );
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [naturalDims, setNaturalDims] = useState<{ width: number; height: number }>({
+    width: sourceVideoWidth || 1920,
+    height: sourceVideoHeight || 1080,
+  });
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('framing_presets');
   const [activeWordIdx, setActiveWordIdx] = useState<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -125,10 +159,15 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setDraft(sanitizeCaptionConfig(initialConfig || DEFAULT_CAPTION_CONFIG));
+      if (initialFramingConfig) {
+        setFramingDraft(initialFramingConfig);
+      }
       setActiveWordIdx(0);
       setFontUploadError(null);
+      setIsPlaying(false);
+      setCurrentTime(0);
     }
-  }, [isOpen, initialConfig]);
+  }, [isOpen, initialConfig, initialFramingConfig]);
 
   // Animated karaoke word highlight loop for live interactive preview
   useEffect(() => {
@@ -325,22 +364,153 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
     }
   };
 
+  const computeVideoTransform = (): React.CSSProperties => {
+    const vW = naturalDims.width || sourceVideoWidth || 1920;
+    const vH = naturalDims.height || sourceVideoHeight || 1080;
+    const cW = canvasDimensions.width || 216;
+    const cH = canvasDimensions.height || 384;
+
+    if (draft.aspectRatio === 'original') {
+      return {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain',
+        pointerEvents: 'none',
+        display: 'block',
+      };
+    }
+
+    // Scale factor to cover canvas completely while strictly maintaining source aspect ratio (crop + scale, no distortion)
+    const scale = Math.max(cW / vW, cH / vH);
+    const zoom =
+      framingDraft.mode === 'crop' && framingDraft.cropZoom && framingDraft.cropZoom > 1.0
+        ? framingDraft.cropZoom
+        : 1.0;
+    const effectiveScale = scale * zoom;
+
+    const scaledW = vW * effectiveScale;
+    const scaledH = vH * effectiveScale;
+
+    const overflowX = Math.max(0, scaledW - cW);
+    const overflowY = Math.max(0, scaledH - cH);
+
+    // In crop mode: user pans. In face_tracking mode: centered standard framing (processed server-side)
+    const posX =
+      framingDraft.mode === 'crop'
+        ? (framingDraft.cropPositionX !== undefined ? framingDraft.cropPositionX : 0.5)
+        : 0.5;
+    const posY =
+      framingDraft.mode === 'crop'
+        ? (framingDraft.cropPositionY !== undefined ? framingDraft.cropPositionY : 0.5)
+        : 0.5;
+
+    const clampedX = Math.max(0, Math.min(1, posX));
+    const clampedY = Math.max(0, Math.min(1, posY));
+
+    const left = -overflowX * clampedX;
+    const top = -overflowY * clampedY;
+
+    return {
+      position: 'absolute',
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${scaledW}px`,
+      height: `${scaledH}px`,
+      maxWidth: 'none',
+      maxHeight: 'none',
+      objectFit: 'fill',
+      pointerEvents: 'none',
+      display: 'block',
+    };
+  };
+
+  const togglePlayPause = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  const handleSeek = (time: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const v = e.currentTarget;
+    if (v.duration && !isNaN(v.duration)) {
+      setDuration(v.duration);
+    }
+    if (v.videoWidth && v.videoHeight) {
+      setNaturalDims({ width: v.videoWidth, height: v.videoHeight });
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
+    }
+    setIsMuted(!isMuted);
+  };
+
+  const handleFramingChange = (newConfig: FramingConfig) => {
+    setFramingDraft(newConfig);
+    if (onUpdateFramingConfig) {
+      onUpdateFramingConfig(newConfig);
+    }
+  };
+
+  const handleResetCrop = () => {
+    const updated: FramingConfig = {
+      ...framingDraft,
+      mode: 'crop',
+      cropPositionX: 0.5,
+      cropPositionY: 0.5,
+      cropZoom: 1.0,
+    };
+    handleFramingChange(updated);
+  };
+
   const handleResetDefaults = () => {
     setDraft({ ...DEFAULT_CAPTION_CONFIG });
+    const resetFraming: FramingConfig = { ...DEFAULT_FRAMING_CONFIG };
+    setFramingDraft(resetFraming);
+    if (onUpdateFramingConfig) {
+      onUpdateFramingConfig(resetFraming);
+    }
   };
 
   const handleSaveOnly = async () => {
     const safe = sanitizeCaptionConfig(draft);
-    await onSave(safe);
+    if (onUpdateFramingConfig) {
+      await onUpdateFramingConfig(framingDraft);
+    }
+    await onSave(safe, framingDraft);
     onClose();
   };
 
   const handleApplyAndProceedClick = async () => {
     const safe = sanitizeCaptionConfig(draft);
+    if (onUpdateFramingConfig) {
+      await onUpdateFramingConfig(framingDraft);
+    }
     if (onApplyAndProceed) {
-      await onApplyAndProceed(safe);
+      await onApplyAndProceed(safe, framingDraft);
     } else {
-      await onSave(safe);
+      await onSave(safe, framingDraft);
       onClose();
     }
   };
@@ -504,6 +674,25 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
               {/* TAB 1: Framing, Presets, Group Size, Wrap Width, Positioning */}
               {activeTab === 'framing_presets' && (
                 <div className="space-y-5">
+                  {/* Section 1: Video Framing Mode & Crop Controls */}
+                  <div className="p-3.5 rounded-lg bg-[var(--surface-default)] border border-[var(--border-default)] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CropIcon className="w-4 h-4 text-[var(--brand-primary)]" />
+                        <h3 className="text-xs font-bold ws-title">Video Framing Mode</h3>
+                      </div>
+                      <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                        {framingDraft.mode === 'face_tracking' ? 'Speaker-Aware' : 'Manual Pan & Crop'}
+                      </span>
+                    </div>
+
+                    <FramingSelector
+                      config={framingDraft}
+                      onChange={handleFramingChange}
+                      variant="embedded"
+                    />
+                  </div>
+
                   {/* Preset Selector */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold ws-title block">
@@ -1401,11 +1590,30 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
                 className={`relative bg-[#0d1117] rounded-lg shadow-inner overflow-hidden border border-[var(--border-default)] flex items-center justify-center transition-all ${getAspectRatioClasses()}`}
                 style={{ touchAction: 'none' }}
               >
-                {/* Visual Video Frame Backdrop Mockup */}
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/10 to-black/40 pointer-events-none" />
-                <div className="absolute inset-x-0 bottom-2 text-center text-[10px] text-white/30 font-mono tracking-wider pointer-events-none">
-                  PREVIEW STAGE
-                </div>
+                {/* Live Video Preview Layer with Instant Aspect-Ratio & Manual Crop Framing */}
+                {videoSrc && (
+                  <video
+                    ref={videoRef}
+                    id="caption-preview-video"
+                    src={videoSrc}
+                    playsInline
+                    muted={isMuted}
+                    loop
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    className="pointer-events-none select-none"
+                    style={computeVideoTransform()}
+                  />
+                )}
+                {/* Subtle vignette gradient over canvas */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/35 pointer-events-none" />
+                {!videoSrc && (
+                  <div className="absolute inset-x-0 bottom-2 text-center text-[10px] text-white/30 font-mono tracking-wider pointer-events-none">
+                    PREVIEW STAGE
+                  </div>
+                )}
 
                 {/* Vertical Center Axis Snap Guide */}
                 {showSnapX && (
@@ -1530,9 +1738,92 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
               </div>
             </div>
 
+            {/* Video Playback & Timeline Controls */}
+            <div className="w-full mt-3 space-y-2 bg-[var(--surface-default)] rounded-lg p-2.5 border border-[var(--border-default)]">
+              <div className="flex items-center gap-2">
+                <button
+                  id="btn-preview-play-pause"
+                  type="button"
+                  onClick={togglePlayPause}
+                  disabled={!videoSrc}
+                  className="p-1.5 rounded-md bg-[var(--brand-primary)] hover:bg-[var(--brand-hover)] text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                  title={isPlaying ? 'Pause video' : 'Play video'}
+                >
+                  {isPlaying ? (
+                    <Pause className="w-3.5 h-3.5" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                  )}
+                </button>
+
+                {/* Time Scrubber */}
+                <input
+                  id="slider-preview-time"
+                  type="range"
+                  min={0}
+                  max={duration || 100}
+                  step={0.1}
+                  value={currentTime}
+                  disabled={!videoSrc || duration <= 0}
+                  onChange={(e) => handleSeek(parseFloat(e.target.value))}
+                  className="flex-1 h-1.5 bg-[var(--surface-sunken)] rounded-lg appearance-none cursor-pointer accent-[var(--brand-primary)] disabled:opacity-40"
+                  title="Seek video timeline"
+                />
+
+                {/* Duration readout */}
+                <span className="text-[11px] font-mono text-[var(--text-secondary)] whitespace-nowrap">
+                  {formatSeconds(currentTime)} / {formatSeconds(duration)}
+                </span>
+
+                {/* Mute Toggle */}
+                <button
+                  id="btn-preview-mute-toggle"
+                  type="button"
+                  onClick={toggleMute}
+                  disabled={!videoSrc}
+                  className="p-1.5 rounded-md hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-40 cursor-pointer shrink-0"
+                  title={isMuted ? 'Unmute preview audio' : 'Mute preview audio'}
+                >
+                  {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {/* Status footer with quick Center action */}
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)] pt-1 border-t border-[var(--border-subtle)]">
+                <span className="flex items-center gap-1.5 truncate">
+                  {framingDraft.mode === 'crop' ? (
+                    <>
+                      <CropIcon className="w-3 h-3 text-[var(--brand-text)] shrink-0" />
+                      <span className="truncate">
+                        Manual Crop: <strong className="text-[var(--text-primary)]">{Math.round((framingDraft.cropPositionX ?? 0.5) * 100)}% H</strong>, <strong className="text-[var(--text-primary)]">{Math.round((framingDraft.cropPositionY ?? 0.5) * 100)}% V</strong>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Scan className="w-3 h-3 text-[var(--brand-text)] shrink-0" />
+                      <span className="truncate">Face Tracking (Speaker-Aware)</span>
+                    </>
+                  )}
+                </span>
+
+                {framingDraft.mode === 'crop' && (
+                  <button
+                    id="btn-preview-quick-center"
+                    type="button"
+                    onClick={handleResetCrop}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-[var(--brand-text)] hover:underline cursor-pointer shrink-0 ml-2"
+                    title="Center framing immediately"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    <span>Center</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="w-full text-center pt-2">
               <span className="text-[11px] ws-muted">
-                Drag caption freely on canvas • Snap to axis guides
+                Drag caption freely on canvas • Adjust framing live with pan sliders
               </span>
             </div>
           </div>

@@ -22,7 +22,6 @@ import { validateViralClipsJson } from '../utils/jsonValidator';
 import { formatSecondsToTimestamp } from '../utils/timestamps';
 import { safeCopyToClipboard } from '../utils/clipboard';
 import { CaptionConfigModal } from './CaptionConfigModal';
-import { FramingSelector } from './FramingSelector';
 
 interface Step4ViralJsonProps {
   session: ProjectSession;
@@ -396,16 +395,6 @@ export const Step4ViralJson: React.FC<Step4ViralJsonProps> = ({
               )}
             </div>
 
-            {/* Dedicated Framing Configuration */}
-            {validation.isValid && (
-              <div className="pt-2">
-                <FramingSelector
-                  config={framingDraft}
-                  onChange={handleFramingChange}
-                />
-              </div>
-            )}
-
             {/* Error List */}
             {validation.errors.length > 0 && (
               <div className="space-y-1 p-3 ws-alert-error text-xs">
@@ -481,17 +470,25 @@ export const Step4ViralJson: React.FC<Step4ViralJsonProps> = ({
         isOpen={isCaptionModalOpen}
         onClose={() => setIsCaptionModalOpen(false)}
         config={captionConfig}
+        framingConfig={framingDraft}
+        onUpdateFramingConfig={handleFramingChange}
+        videoSrc={session.video ? `/api/media/stream/${session.sessionId}` : undefined}
         sourceVideoWidth={session.video?.width}
         sourceVideoHeight={session.video?.height}
-        onSave={async (savedCfg) => {
+        onSave={async (savedCfg, savedFraming) => {
           if (onUpdateCaptionConfig) await onUpdateCaptionConfig(savedCfg);
+          if (savedFraming && onUpdateFramingConfig) await onUpdateFramingConfig(savedFraming);
         }}
-        onApplyAndProceed={async (savedCfg) => {
+        onApplyAndProceed={async (savedCfg, savedFraming) => {
           if (onUpdateCaptionConfig) {
             await onUpdateCaptionConfig(savedCfg);
           }
+          if (savedFraming && onUpdateFramingConfig) {
+            await onUpdateFramingConfig(savedFraming);
+          }
           setIsCaptionModalOpen(false);
-          onApplyClipsJson(jsonInput, recommendedClipDurationSec, savedCfg, framingDraft);
+          const finalFraming = savedFraming || framingDraft;
+          onApplyClipsJson(jsonInput, recommendedClipDurationSec, savedCfg, finalFraming);
         }}
         clipCount={validation?.clips?.length}
       />
