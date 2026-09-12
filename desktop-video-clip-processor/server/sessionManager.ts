@@ -100,7 +100,8 @@ export function createSession(): ProjectSession {
       waitingCount: 0,
       totalCount: 0,
     },
-    framingConfig: { ...DEFAULT_FRAMING_CONFIG },
+    captionConfig: { ...DEFAULT_CAPTION_CONFIG },
+    framingConfig: DEFAULT_FRAMING_CONFIG,
   };
 
   sessions.set(sessionId, session);

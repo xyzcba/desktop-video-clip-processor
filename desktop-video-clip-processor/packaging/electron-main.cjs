@@ -173,6 +173,7 @@ if (!gotTheLock) {
         const ffmpegExe = path.join(resourcesPath, 'bin', isWin ? 'ffmpeg.exe' : 'ffmpeg');
         const ffprobeExe = path.join(resourcesPath, 'bin', isWin ? 'ffprobe.exe' : 'ffprobe');
         const whisperModel = path.join(resourcesPath, 'models', 'Xenova', 'whisper-tiny.en', 'onnx', 'encoder_model_quantized.onnx');
+        const faceModel = path.join(resourcesPath, 'models', 'face', 'version-RFB-320.onnx');
 
         if (!fs.existsSync(ffmpegExe)) {
           throw new Error(`Bundled FFmpeg is missing from the application resources at "${ffmpegExe}". Please reinstall the application.`);
@@ -182,6 +183,9 @@ if (!gotTheLock) {
         }
         if (!fs.existsSync(whisperModel)) {
           throw new Error(`Bundled Whisper model is missing from the application resources at "${whisperModel}". Please reinstall the application.`);
+        }
+        if (!fs.existsSync(faceModel)) {
+          throw new Error(`Bundled Face Tracking model is missing from the application resources at "${faceModel}". Please reinstall the application.`);
         }
       }
 

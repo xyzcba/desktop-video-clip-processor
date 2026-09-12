@@ -2,7 +2,7 @@ import * as ort from 'onnxruntime-node';
 import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
-import { getFfmpegBinary } from '../resourcePaths';
+import { getFfmpegBinary, getFaceModelPath } from '../resourcePaths';
 import { FaceBoundingBox, SampledFrameDetection } from './trackingTypes';
 
 const FRAME_WIDTH = 320;
@@ -19,7 +19,7 @@ let inferenceSession: ort.InferenceSession | null = null;
 async function getInferenceSession(): Promise<ort.InferenceSession> {
   if (inferenceSession) return inferenceSession;
 
-  const modelPath = path.resolve(process.cwd(), 'models/face/version-RFB-320.onnx');
+  const modelPath = getFaceModelPath();
   if (!fs.existsSync(modelPath)) {
     throw new Error(`Face tracking model not found at: ${modelPath}`);
   }

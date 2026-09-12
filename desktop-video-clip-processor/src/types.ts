@@ -1,3 +1,6 @@
+import { CaptionConfig, WordTimestamp, OutputAspectRatio } from './caption/captionTypes';
+import { FramingConfig } from './framing/framingTypes';
+
 /**
  * Types and interfaces for the Local Windows Desktop Video Processing Application
  */
@@ -19,11 +22,6 @@ export interface VideoMetadata {
   audioSampleRate?: number;
   audioChannels?: number;
 }
-
-import { CaptionConfig, WordTimestamp, OutputAspectRatio } from './caption/captionTypes';
-export * from './caption/captionTypes';
-import { FramingConfig } from './framing/framingTypes';
-export * from './framing/framingTypes';
 
 export interface MasterTranscriptItem {
   id: number;

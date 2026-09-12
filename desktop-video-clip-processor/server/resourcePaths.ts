@@ -178,6 +178,35 @@ export function getWhisperModelsDirectory(): string {
 }
 
 /**
+ * Resolves the path to the bundled Face Tracking ONNX model.
+ * In packaged Electron app: <resourcesPath>/models/face/version-RFB-320.onnx
+ * In development: ./models/face/version-RFB-320.onnx
+ */
+export function getFaceModelPath(): string {
+  const modelSubpath = path.join('models', 'face', 'version-RFB-320.onnx');
+
+  // 1. Packaged Electron resourcesPath
+  const packagedModel = path.join(getResourcesPath(), modelSubpath);
+  if (fs.existsSync(packagedModel)) {
+    return packagedModel;
+  }
+
+  // 2. Local workspace models directory
+  const localModel = path.join(process.cwd(), modelSubpath);
+  if (fs.existsSync(localModel)) {
+    return localModel;
+  }
+
+  if (isPackaged()) {
+    throw new Error(
+      `Bundled Face Tracking ONNX model is missing from application resources at "${packagedModel}". Please reinstall the application.`
+    );
+  }
+
+  return localModel;
+}
+
+/**
  * Resolves the user's Downloads directory without hardcoding usernames.
  */
 export function getDownloadsDirectory(): string {
@@ -258,6 +287,8 @@ export interface ResourceValidationResult {
   ffprobeValid: boolean;
   whisperModelsDir: string;
   whisperValid: boolean;
+  faceModelPath: string;
+  faceModelValid: boolean;
   errors: string[];
 }
 
@@ -307,8 +338,20 @@ export function validateAllResources(): ResourceValidationResult {
     errors.push(err.message);
   }
 
+  let faceModelPath = '';
+  let faceModelValid = false;
+  try {
+    faceModelPath = getFaceModelPath();
+    faceModelValid = fs.existsSync(faceModelPath);
+    if (!faceModelValid) {
+      errors.push(`Face tracking ONNX model not found at ${faceModelPath}`);
+    }
+  } catch (err: any) {
+    errors.push(err.message);
+  }
+
   return {
-    allValid: errors.length === 0 && ffmpegValid && ffprobeValid && whisperValid,
+    allValid: errors.length === 0 && ffmpegValid && ffprobeValid && whisperValid && faceModelValid,
     isPackaged: packaged,
     ffmpegPath,
     ffmpegValid,
@@ -316,6 +359,8 @@ export function validateAllResources(): ResourceValidationResult {
     ffprobeValid,
     whisperModelsDir,
     whisperValid,
+    faceModelPath,
+    faceModelValid,
     errors,
   };
 }
