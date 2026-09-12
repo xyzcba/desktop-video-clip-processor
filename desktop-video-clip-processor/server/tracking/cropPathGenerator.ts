@@ -5,26 +5,41 @@ import { CropKeyframe } from './trackingTypes';
 import { OutputAspectRatio } from '../../src/caption/captionTypes';
 
 // ============================================================================
-// CAMERA MOVEMENT & SMOOTHING CONFIGURATION (EMA + VELOCITY LIMIT MODEL)
+// CAMERA MOVEMENT & SMOOTHING CONFIGURATION (CONTINUOUS EMA + DYNAMICS MODEL)
 // ============================================================================
 /**
- * Sampling rate for crop keyframes emitted to FFmpeg sendcmd (keyframes per second).
+ * Sampling rate for camera path keyframes emitted to FFmpeg sendcmd (keyframes per second).
+ * Independent of the face-analysis sampling rate (~2 FPS).
+ * 30 FPS ensures dense, frame-by-frame updates without visible stepping, without altering video FPS.
  */
-export const INTERPOLATION_FPS = 10;
+export const CAMERA_PATH_FPS = 30;
+export const INTERPOLATION_FPS = CAMERA_PATH_FPS; // Backward-compatible alias
 
 /**
  * Smoothing factor for raw face targets (0 < alpha <= 1).
- * Evaluated at each INTERPOLATION_FPS timestep (dt = 0.1s).
+ * Normalized at 10 FPS reference rate and automatically scaled to CAMERA_PATH_FPS.
  * - Lower values (e.g. 0.15 - 0.25) create softer, more damped following.
  * - Higher values (e.g. 0.30 - 0.45) increase responsiveness.
  */
-export const TARGET_EMA_ALPHA = 0.30;
+export const TARGET_EMA_ALPHA = 0.25;
 
 /**
  * Maximum camera movement speed in pixels per second.
- * Constrains camera pan speed so small/moderate movements never whip dizzyingly.
+ * Constrains maximum pan rate so small/moderate movements never whip dizzyingly.
  */
-export const MAX_VELOCITY_PX_PER_SEC = 500;
+export const MAX_VELOCITY_PX_PER_SEC = 550;
+
+/**
+ * Maximum camera acceleration in pixels per second squared.
+ * Controls how smoothly and swiftly the camera picks up speed toward the target.
+ */
+export const MAX_ACCELERATION_PX_PER_SEC2 = 1200;
+
+/**
+ * Maximum camera deceleration in pixels per second squared.
+ * Controls how smoothly and naturally the camera brakes as it settles onto the target.
+ */
+export const MAX_DECELERATION_PX_PER_SEC2 = 1400;
 
 /**
  * Large movement threshold as a ratio of the reference crop dimension.
@@ -40,8 +55,11 @@ export const SNAP_DISTANCE_RATIO = 0.66;
 export const DEADBAND_PIXELS = 24;
 
 export interface CameraMotionOptions {
+  cameraPathFps?: number;
   emaAlpha?: number;
   maxVelocityPxPerSec?: number;
+  maxAccelerationPxPerSec2?: number;
+  maxDecelerationPxPerSec2?: number;
   snapDistanceRatio?: number;
   deadbandPixels?: number;
 }
@@ -81,10 +99,12 @@ export function calculateCropDimensions(
 
 /**
  * Generates crop keyframes and a sendcmd command file for FFmpeg.
- * Implements a continuous EMA + velocity-limited camera movement model:
+ * Implements genuine continuous camera motion with position + velocity dynamics:
  * - Raw face targets are smoothed using EMA
- * - Camera movement is constrained by a maximum velocity so it follows responsively and settles naturally
- * - Continuous camera position & velocity maintained over time (no fixed-duration event boundaries)
+ * - Camera maintains continuous position and velocity over time
+ * - Camera accelerates toward the smoothed target and naturally decelerates as it approaches
+ * - Mid-movement redirections curve smoothly using current position and velocity (no animation restarts)
+ * - Dense camera-path sampling rate (30 FPS) provides frame-by-frame smoothness without altering video FPS
  * - Large movements (exceeding dimension-scaled distance threshold) SNAP immediately
  * - Deadband suppresses detection micro-jitter
  */
@@ -138,8 +158,11 @@ export function generateSmoothCropPath(
     .sort((a, b) => a.timestamp - b.timestamp);
 
   // Resolve tuning parameters
-  const emaAlpha = options?.emaAlpha ?? TARGET_EMA_ALPHA;
+  const fps = options?.cameraPathFps ?? CAMERA_PATH_FPS;
+  const baseEmaAlpha = options?.emaAlpha ?? TARGET_EMA_ALPHA;
   const maxVelocity = options?.maxVelocityPxPerSec ?? MAX_VELOCITY_PX_PER_SEC;
+  const maxAccel = options?.maxAccelerationPxPerSec2 ?? MAX_ACCELERATION_PX_PER_SEC2;
+  const maxDecel = options?.maxDecelerationPxPerSec2 ?? MAX_DECELERATION_PX_PER_SEC2;
   const snapRatio = options?.snapDistanceRatio ?? SNAP_DISTANCE_RATIO;
   const baseDeadband = options?.deadbandPixels ?? DEADBAND_PIXELS;
 
@@ -150,9 +173,13 @@ export function generateSmoothCropPath(
   // Large movement threshold: ~66% of crop dimension (e.g. ~401px on 608px 1080p vertical crop)
   const largeMovementThreshold = Math.round(refDimension * snapRatio);
 
-  // 2. Continuous simulation loop with EMA smoothing + velocity limiting + large-movement snap
-  const dt = 1.0 / INTERPOLATION_FPS;
-  const totalFrames = Math.ceil(clipDurationSec * INTERPOLATION_FPS);
+  // 2. Continuous simulation loop with true position + velocity dynamics
+  const dt = 1.0 / fps;
+  // Make EMA smoothing rate independent of the sampling rate:
+  // Evaluates same effective smoothing per unit time regardless of fps
+  const effectiveEmaAlpha = 1 - Math.pow(1 - Math.min(0.99, Math.max(0.01, baseEmaAlpha)), dt / 0.1);
+
+  const totalFrames = Math.ceil(clipDurationSec * fps);
   const keyframes: CropKeyframe[] = [];
 
   // Initialize state with first waypoint
@@ -201,35 +228,75 @@ export function generateSmoothCropPath(
       }
     }
 
-    // Step continuous dynamics (for f > 0)
+    // Advance continuous dynamics (for f > 0)
     if (f > 0) {
-      // 1. Update smoothed target using EMA
-      smoothedTargetX += (activeRawTargetX - smoothedTargetX) * emaAlpha;
-      smoothedTargetY += (activeRawTargetY - smoothedTargetY) * emaAlpha;
+      // 1. Advance EMA smoothed target
+      smoothedTargetX += (activeRawTargetX - smoothedTargetX) * effectiveEmaAlpha;
+      smoothedTargetY += (activeRawTargetY - smoothedTargetY) * effectiveEmaAlpha;
 
-      // 2. Constrain camera movement toward smoothed target by maximum velocity
+      // 2. Vector from current camera position to smoothed target
       const dx = smoothedTargetX - currentCameraX;
       const dy = smoothedTargetY - currentCameraY;
       const distToTarget = Math.hypot(dx, dy);
 
-      if (distToTarget <= 0.5) {
+      if (distToTarget <= 0.2 && Math.hypot(currentVx, currentVy) <= 1.0) {
+        // Target reached: settle camera to prevent micro-chatter
         currentCameraX = smoothedTargetX;
         currentCameraY = smoothedTargetY;
         currentVx = 0;
         currentVy = 0;
       } else {
-        const maxStepDist = maxVelocity * dt;
-        if (distToTarget <= maxStepDist) {
+        // Natural braking curve: v_stop = sqrt(2 * a_dec * distance)
+        // For very small distances, use a linear transition zone to avoid infinite derivative at zero
+        const linearZonePx = 10.0;
+        let approachSpeed: number;
+        if (distToTarget <= linearZonePx) {
+          const slope = Math.sqrt((2 * maxDecel) / linearZonePx);
+          approachSpeed = distToTarget * slope;
+        } else {
+          approachSpeed = Math.sqrt(2 * maxDecel * distToTarget);
+        }
+
+        const desiredSpeed = Math.min(maxVelocity, approachSpeed);
+        const dirX = dx / distToTarget;
+        const dirY = dy / distToTarget;
+
+        const desiredVx = dirX * desiredSpeed;
+        const desiredVy = dirY * desiredSpeed;
+
+        // Compute required change in velocity vector
+        const deltaVx = desiredVx - currentVx;
+        const deltaVy = desiredVy - currentVy;
+        const deltaV = Math.hypot(deltaVx, deltaVy);
+
+        if (deltaV > 0) {
+          // Determine whether we are accelerating or braking/turning
+          const isAccelerating = (currentVx * deltaVx + currentVy * deltaVy) >= 0;
+          const accelLimit = isAccelerating ? maxAccel : maxDecel;
+          const maxDeltaV = accelLimit * dt;
+
+          if (deltaV <= maxDeltaV) {
+            currentVx = desiredVx;
+            currentVy = desiredVy;
+          } else {
+            const ratio = maxDeltaV / deltaV;
+            currentVx += deltaVx * ratio;
+            currentVy += deltaVy * ratio;
+          }
+        }
+
+        // Integrate position with updated velocity
+        currentCameraX += currentVx * dt;
+        currentCameraY += currentVy * dt;
+
+        // If the camera stepped past the target while moving slowly, clamp cleanly
+        const newDx = smoothedTargetX - currentCameraX;
+        const newDy = smoothedTargetY - currentCameraY;
+        if (dx * newDx + dy * newDy < 0 && Math.hypot(currentVx, currentVy) < 20) {
           currentCameraX = smoothedTargetX;
           currentCameraY = smoothedTargetY;
-          currentVx = dx / dt;
-          currentVy = dy / dt;
-        } else {
-          const stepRatio = maxStepDist / distToTarget;
-          currentCameraX += dx * stepRatio;
-          currentCameraY += dy * stepRatio;
-          currentVx = (dx / distToTarget) * maxVelocity;
-          currentVy = (dy / distToTarget) * maxVelocity;
+          currentVx = 0;
+          currentVy = 0;
         }
       }
     }
