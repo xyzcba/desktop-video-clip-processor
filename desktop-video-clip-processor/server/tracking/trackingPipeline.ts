@@ -2,8 +2,9 @@ import { WordTimestamp } from '../../src/types';
 import { OutputAspectRatio } from '../../src/caption/captionTypes';
 import { detectFacesInClipRange } from './faceDetector';
 import { buildFaceTracks } from './faceTracker';
-import { computeSpeakerTrajectory } from './speakerSelector';
+import { computeSpeakerTrajectory, computeDynamicSpeakerTrajectory } from './speakerSelector';
 import { generateSmoothCropPath } from './cropPathGenerator';
+import { generateDynamicSmoothCropPath } from './dynamicCropPathGenerator';
 import { TrackingResult } from './trackingTypes';
 import { calculateTargetResolution } from '../ffmpegService';
 
@@ -17,12 +18,16 @@ export interface TrackingPipelineOptions {
   words?: WordTimestamp[];
   workingDir: string;
   clipId: string | number;
+  mode?: 'face_tracking' | 'dynamic_face_tracking';
   abortSignal?: AbortSignal;
 }
 
 /**
  * Executes the complete face detection, track association, multimodal speaker selection,
- * and smooth cinematic crop path generation for a single clip.
+ * and smooth camera crop path generation for a single clip.
+ * Supports both:
+ * - 'face_tracking': Horizontal Face Tracking (preserves existing 1D horizontal follow)
+ * - 'dynamic_face_tracking': Dynamic Face Tracking (2D horizontal + vertical follow with natural face zoom)
  */
 export async function executeFaceTrackingPipeline(
   options: TrackingPipelineOptions
@@ -37,10 +42,13 @@ export async function executeFaceTrackingPipeline(
     words = [],
     workingDir,
     clipId,
+    mode = 'face_tracking',
     abortSignal,
   } = options;
 
-  console.log(`[Face Tracking] Analyzing clip ${clipId} (${startSec.toFixed(1)}s - ${(startSec + durationSec).toFixed(1)}s)...`);
+  const isDynamic = mode === 'dynamic_face_tracking';
+  const modeLabel = isDynamic ? 'Dynamic Face Tracking' : 'Horizontal Face Tracking';
+  console.log(`[${modeLabel}] Analyzing clip ${clipId} (${startSec.toFixed(1)}s - ${(startSec + durationSec).toFixed(1)}s)...`);
 
   // Step 1: Sparse ONNX Face Detection at 2 FPS
   const detections = await detectFacesInClipRange(videoPath, startSec, durationSec, abortSignal);
@@ -48,35 +56,93 @@ export async function executeFaceTrackingPipeline(
   // Check if any faces were found
   const totalDetections = detections.reduce((sum, d) => sum + d.faces.length, 0);
   if (totalDetections === 0) {
-    console.log(`[Face Tracking] Clip ${clipId}: No faces detected. Falling back to default center framing.`);
-    const { cropFilter } = calculateTargetResolution(sourceWidth, sourceHeight, aspectRatio);
-    return {
-      hasFaces: false,
-      cropFilter,
-      keyframes: [],
-      detectedTracksCount: 0,
-    };
+    console.log(`[${modeLabel}] Clip ${clipId}: No faces detected. Falling back to default center framing.`);
+    if (isDynamic) {
+      const fallback = generateDynamicSmoothCropPath(
+        [],
+        sourceWidth,
+        sourceHeight,
+        durationSec,
+        aspectRatio,
+        workingDir,
+        clipId
+      );
+      return {
+        hasFaces: false,
+        cropFilter: fallback.cropFilter,
+        keyframes: fallback.keyframes,
+        detectedTracksCount: 0,
+      };
+    } else {
+      const { cropFilter } = calculateTargetResolution(sourceWidth, sourceHeight, aspectRatio);
+      return {
+        hasFaces: false,
+        cropFilter,
+        keyframes: [],
+        detectedTracksCount: 0,
+      };
+    }
   }
 
   // Step 2: Temporal Track Association
   const tracks = buildFaceTracks(detections);
   if (tracks.length === 0) {
-    console.log(`[Face Tracking] Clip ${clipId}: Detections were transient noise. Falling back to default center framing.`);
-    const { cropFilter } = calculateTargetResolution(sourceWidth, sourceHeight, aspectRatio);
+    console.log(`[${modeLabel}] Clip ${clipId}: Detections were transient noise. Falling back to default center framing.`);
+    if (isDynamic) {
+      const fallback = generateDynamicSmoothCropPath(
+        [],
+        sourceWidth,
+        sourceHeight,
+        durationSec,
+        aspectRatio,
+        workingDir,
+        clipId
+      );
+      return {
+        hasFaces: false,
+        cropFilter: fallback.cropFilter,
+        keyframes: fallback.keyframes,
+        detectedTracksCount: 0,
+      };
+    } else {
+      const { cropFilter } = calculateTargetResolution(sourceWidth, sourceHeight, aspectRatio);
+      return {
+        hasFaces: false,
+        cropFilter,
+        keyframes: [],
+        detectedTracksCount: 0,
+      };
+    }
+  }
+
+  console.log(`[${modeLabel}] Clip ${clipId}: Identified ${tracks.length} stable face track(s).`);
+
+  if (isDynamic) {
+    // Dynamic Face Tracking: tuned speaker selection & 2D pan/tilt + moderate zoom
+    const trajectory = computeDynamicSpeakerTrajectory(tracks, durationSec, words);
+    const { keyframes, sendcmdFilePath, cropFilter } = generateDynamicSmoothCropPath(
+      trajectory,
+      sourceWidth,
+      sourceHeight,
+      durationSec,
+      aspectRatio,
+      workingDir,
+      clipId
+    );
+
+    console.log(`[Dynamic Face Tracking] Clip ${clipId}: Generated 2D smooth crop path with ${keyframes.length} keyframes.`);
+
     return {
-      hasFaces: false,
+      hasFaces: true,
       cropFilter,
-      keyframes: [],
-      detectedTracksCount: 0,
+      sendcmdFilePath,
+      keyframes,
+      detectedTracksCount: tracks.length,
     };
   }
 
-  console.log(`[Face Tracking] Clip ${clipId}: Identified ${tracks.length} stable face track(s).`);
-
-  // Step 3: Multimodal Speaker Selection with Hysteresis
+  // Horizontal Face Tracking: 100% preserved existing pipeline
   const trajectory = computeSpeakerTrajectory(tracks, durationSec, words);
-
-  // Step 4: Cinematic Crop Path Generation with Deadband and Smoothstep
   const { keyframes, sendcmdFilePath, cropFilter } = generateSmoothCropPath(
     trajectory,
     sourceWidth,
@@ -87,7 +153,7 @@ export async function executeFaceTrackingPipeline(
     clipId
   );
 
-  console.log(`[Face Tracking] Clip ${clipId}: Generated smooth crop path with ${keyframes.length} keyframes.`);
+  console.log(`[Horizontal Face Tracking] Clip ${clipId}: Generated smooth crop path with ${keyframes.length} keyframes.`);
 
   return {
     hasFaces: true,

@@ -98,7 +98,11 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
               </span>
               <span className="text-[var(--text-muted)]">•</span>
               <span className="font-medium text-[var(--text-primary)]">
-                {session?.framingConfig?.mode === 'face_tracking' ? 'Face Tracking' : 'Crop'}
+                {session?.framingConfig?.mode === 'dynamic_face_tracking'
+                  ? 'Dynamic Face Tracking'
+                  : session?.framingConfig?.mode === 'face_tracking'
+                  ? 'Horizontal Face Tracking'
+                  : 'Crop'}
               </span>
               <span className="text-[var(--text-muted)]">•</span>
               <span>{currentPreset.name}</span>

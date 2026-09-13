@@ -1,4 +1,4 @@
-export type FramingMode = 'crop' | 'face_tracking';
+export type FramingMode = 'crop' | 'face_tracking' | 'dynamic_face_tracking';
 
 export interface FramingConfig {
   mode: FramingMode;

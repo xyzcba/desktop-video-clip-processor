@@ -27,6 +27,7 @@ import {
   Volume2,
   VolumeX,
   Scan,
+  Focus,
   Crop as CropIcon,
 } from 'lucide-react';
 import {
@@ -682,7 +683,11 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
                         <h3 className="text-xs font-bold ws-title">Video Framing Mode</h3>
                       </div>
                       <span className="text-[11px] font-mono text-[var(--text-muted)]">
-                        {framingDraft.mode === 'face_tracking' ? 'Speaker-Aware' : 'Manual Pan & Crop'}
+                        {framingDraft.mode === 'dynamic_face_tracking'
+                          ? 'Dynamic 2D + Zoom'
+                          : framingDraft.mode === 'face_tracking'
+                          ? 'Horizontal Tracking'
+                          : 'Manual Pan & Crop'}
                       </span>
                     </div>
 
@@ -1798,10 +1803,15 @@ export const CaptionConfigModal: React.FC<CaptionConfigModalProps> = ({
                         Manual Crop: <strong className="text-[var(--text-primary)]">{Math.round((framingDraft.cropPositionX ?? 0.5) * 100)}% H</strong>, <strong className="text-[var(--text-primary)]">{Math.round((framingDraft.cropPositionY ?? 0.5) * 100)}% V</strong>
                       </span>
                     </>
+                  ) : framingDraft.mode === 'dynamic_face_tracking' ? (
+                    <>
+                      <Focus className="w-3 h-3 text-[var(--brand-text)] shrink-0" />
+                      <span className="truncate">Dynamic Face Tracking (2D Pan + Natural Zoom)</span>
+                    </>
                   ) : (
                     <>
                       <Scan className="w-3 h-3 text-[var(--brand-text)] shrink-0" />
-                      <span className="truncate">Face Tracking (Speaker-Aware)</span>
+                      <span className="truncate">Horizontal Face Tracking (Speaker-Aware)</span>
                     </>
                   )}
                 </span>

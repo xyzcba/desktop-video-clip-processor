@@ -456,7 +456,7 @@ export async function startClipGeneration(sessionId: string): Promise<void> {
         const framingConfig = session.framingConfig || DEFAULT_FRAMING_CONFIG;
         let trackingCropFilter: string | undefined = undefined;
 
-        if (framingConfig.mode === 'face_tracking') {
+        if (framingConfig.mode === 'face_tracking' || framingConfig.mode === 'dynamic_face_tracking') {
           try {
             const trackingRes = await executeFaceTrackingPipeline({
               videoPath: session.videoFilePath!,
@@ -468,6 +468,7 @@ export async function startClipGeneration(sessionId: string): Promise<void> {
               words: clipRelativeWords,
               workingDir: session.workingDir,
               clipId: i + 1,
+              mode: framingConfig.mode,
               abortSignal: abortController.signal,
             });
             if (trackingRes.hasFaces && trackingRes.cropFilter) {
@@ -583,7 +584,7 @@ export async function retryClipJob(sessionId: string, clipId: string | number): 
   const framingConfig = session.framingConfig || DEFAULT_FRAMING_CONFIG;
   let trackingCropFilter: string | undefined = undefined;
 
-  if (framingConfig.mode === 'face_tracking') {
+  if (framingConfig.mode === 'face_tracking' || framingConfig.mode === 'dynamic_face_tracking') {
     try {
       const trackingRes = await executeFaceTrackingPipeline({
         videoPath: session.videoFilePath!,
@@ -595,6 +596,7 @@ export async function retryClipJob(sessionId: string, clipId: string | number): 
         words: clipRelativeWords,
         workingDir: session.workingDir,
         clipId: String(clipId),
+        mode: framingConfig.mode,
       });
       if (trackingRes.hasFaces && trackingRes.cropFilter) {
         trackingCropFilter = trackingRes.cropFilter;
@@ -651,7 +653,12 @@ export function setSessionFramingConfig(sessionId: string, config: any): Project
   const session = getSession(sessionId);
   if (!session) throw new Error(`Session ${sessionId} not found`);
   session.framingConfig = {
-    mode: config?.mode === 'face_tracking' ? 'face_tracking' : 'crop',
+    mode:
+      config?.mode === 'dynamic_face_tracking'
+        ? 'dynamic_face_tracking'
+        : config?.mode === 'face_tracking'
+        ? 'face_tracking'
+        : 'crop',
     cropPositionX: typeof config?.cropPositionX === 'number' ? Math.max(0, Math.min(1, config.cropPositionX)) : 0.5,
     cropPositionY: typeof config?.cropPositionY === 'number' ? Math.max(0, Math.min(1, config.cropPositionY)) : 0.5,
     cropZoom: typeof config?.cropZoom === 'number' ? Math.max(1, Math.min(3, config.cropZoom)) : 1.0,

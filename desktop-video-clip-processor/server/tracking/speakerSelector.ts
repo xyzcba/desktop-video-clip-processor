@@ -164,3 +164,150 @@ function getClosestPoint(track: FaceTrack, timestamp: number) {
   }
   return best;
 }
+
+/**
+ * Speaker trajectory computation specifically tuned for Dynamic Face Tracking.
+ * - Balances short interruptions (stays on current speaker for < 1.1s interruptions)
+ * - Transitions on established speaker changes (>= 1.1s sustained speaking)
+ * - Suppresses rapid ping-pong switching with a 1.8s post-switch stabilization window
+ * - Natural pause hold (1.6s) to keep visual focus during brief speech pauses
+ * - Smooth fallback to last known positions during transient face loss
+ */
+export function computeDynamicSpeakerTrajectory(
+  tracks: FaceTrack[],
+  clipDurationSec: number,
+  clipRelativeWords: WordTimestamp[] = []
+): TargetSpeakerTrajectoryPoint[] {
+  if (tracks.length === 0) return [];
+
+  // Sort tracks by prominence: duration + average size + centrality
+  const sortedTracks = [...tracks].sort((a, b) => {
+    const durA = a.lastSeenTimestamp - a.firstTimestamp;
+    const durB = b.lastSeenTimestamp - b.firstTimestamp;
+    const sizeA = a.averageSize.width * a.averageSize.height;
+    const sizeB = b.averageSize.width * b.averageSize.height;
+    return durB * 2 + sizeB - (durA * 2 + sizeA);
+  });
+
+  const trajectory: TargetSpeakerTrajectoryPoint[] = [];
+  const sampleStep = 0.5; // 2 FPS
+  const totalSteps = Math.ceil(clipDurationSec / sampleStep);
+
+  const DYNAMIC_SWITCH_DELAY_SEC = 1.1; // Must speak continuously for >= 1.1s to establish switch
+  const STABILIZATION_WINDOW_SEC = 1.8; // Prevent rapid oscillation right after a switch
+  const DYNAMIC_PAUSE_HOLD_SEC = 1.6; // Hold current speaker through pauses up to 1.6s
+
+  let currentSpeakerTrackId: number = sortedTracks[0].id;
+  let currentCandidateTrackId: number | null = null;
+  let candidateSpeakingStartTime: number = 0;
+  let lastSwitchTimestamp: number = -10.0;
+  let lastSpeechDetectedTime: number = 0;
+
+  for (let i = 0; i <= totalSteps; i++) {
+    const t = Math.round(i * sampleStep * 1000) / 1000;
+    const speechActive = isSpeechActiveAt(t, clipRelativeWords);
+    if (speechActive) {
+      lastSpeechDetectedTime = t;
+    }
+
+    // Find all tracks alive at time t (with grace window for occlusion)
+    const aliveTracks = sortedTracks.filter(
+      (tr) => t >= tr.firstTimestamp - 0.25 && t <= tr.lastSeenTimestamp + 1.5
+    );
+
+    if (aliveTracks.length === 0) {
+      // Hold last known position from currentSpeakerTrack or fallback
+      const fallbackTrack = sortedTracks.find((tr) => tr.id === currentSpeakerTrackId) || sortedTracks[0];
+      const lastPoint = trajectory.length > 0 ? trajectory[trajectory.length - 1] : null;
+      trajectory.push({
+        timestamp: t,
+        trackId: fallbackTrack.id,
+        faceCenter: lastPoint ? { ...lastPoint.faceCenter } : { ...fallbackTrack.smoothedCenter },
+        faceSize: lastPoint ? { ...lastPoint.faceSize } : { ...fallbackTrack.averageSize },
+      });
+      continue;
+    }
+
+    if (aliveTracks.length === 1) {
+      // Only 1 face in frame: lock onto this face
+      const singleTrack = aliveTracks[0];
+      currentSpeakerTrackId = singleTrack.id;
+      currentCandidateTrackId = null;
+
+      const pt = getClosestPoint(singleTrack, t);
+      trajectory.push({
+        timestamp: t,
+        trackId: singleTrack.id,
+        faceCenter: pt ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 } : singleTrack.smoothedCenter,
+        faceSize: pt ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 } : singleTrack.averageSize,
+      });
+      continue;
+    }
+
+    // Multiple faces present: evaluate speaking evidence
+    let bestFaceId = currentSpeakerTrackId;
+    let maxEvidenceScore = -1;
+
+    for (const track of aliveTracks) {
+      const pt = getClosestPoint(track, t);
+      const mouthMotion = pt ? pt.mouthMotion : 0;
+      const faceArea = track.averageSize.width * track.averageSize.height;
+
+      // Distance from horizontal center (0.5)
+      const centerDist = Math.abs(track.smoothedCenter.x - 0.5);
+      const centralityScore = 1.0 - Math.min(1.0, centerDist * 1.8);
+
+      let evidenceScore = mouthMotion * (speechActive ? 2.8 : 1.0) + faceArea * 32 + centralityScore * 2;
+
+      // Generous affinity to current speaker to prevent jitter and maintain focus
+      if (track.id === currentSpeakerTrackId) {
+        evidenceScore += 2.5;
+        // If speech is in a brief pause, continue holding current speaker
+        if (!speechActive && t - lastSpeechDetectedTime <= DYNAMIC_PAUSE_HOLD_SEC) {
+          evidenceScore += 1.5;
+        }
+      }
+
+      if (evidenceScore > maxEvidenceScore) {
+        maxEvidenceScore = evidenceScore;
+        bestFaceId = track.id;
+      }
+    }
+
+    // Hysteresis State Machine with rapid-oscillation protection
+    const timeSinceLastSwitch = t - lastSwitchTimestamp;
+    const requiredSwitchDelay =
+      timeSinceLastSwitch < STABILIZATION_WINDOW_SEC
+        ? DYNAMIC_SWITCH_DELAY_SEC + 0.5 // Higher bar if we switched recently (prevents A->B->A->B)
+        : DYNAMIC_SWITCH_DELAY_SEC;
+
+    if (bestFaceId === currentSpeakerTrackId) {
+      currentCandidateTrackId = null;
+    } else {
+      if (currentCandidateTrackId === bestFaceId) {
+        const candidateDuration = t - candidateSpeakingStartTime;
+        if (candidateDuration >= requiredSwitchDelay) {
+          // Established speaker switch
+          currentSpeakerTrackId = bestFaceId;
+          currentCandidateTrackId = null;
+          lastSwitchTimestamp = t;
+        }
+      } else {
+        currentCandidateTrackId = bestFaceId;
+        candidateSpeakingStartTime = t;
+      }
+    }
+
+    const currentTrack = aliveTracks.find((tr) => tr.id === currentSpeakerTrackId) || aliveTracks[0];
+    const pt = getClosestPoint(currentTrack, t);
+
+    trajectory.push({
+      timestamp: t,
+      trackId: currentTrack.id,
+      faceCenter: pt ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 } : currentTrack.smoothedCenter,
+      faceSize: pt ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 } : currentTrack.averageSize,
+    });
+  }
+
+  return trajectory;
+}

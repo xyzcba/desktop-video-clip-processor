@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crop, Scan, RotateCcw } from 'lucide-react';
+import { Crop, Scan, Focus, RotateCcw } from 'lucide-react';
 import { FramingConfig, FramingMode, DEFAULT_FRAMING_CONFIG } from '../framing/framingTypes';
 
 interface FramingSelectorProps {
@@ -52,26 +52,30 @@ export const FramingSelector: React.FC<FramingSelectorProps> = ({
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Framing</h3>
           </div>
           <span className="text-[11px] font-mono text-[var(--text-muted)]">
-            {currentMode === 'face_tracking' ? 'Speaker-Aware' : 'Manual Framing'}
+            {currentMode === 'dynamic_face_tracking'
+              ? 'Dynamic 2D + Zoom'
+              : currentMode === 'face_tracking'
+              ? 'Horizontal Tracking'
+              : 'Manual Framing'}
           </span>
         </div>
       )}
 
-      {/* Two Mode Buttons */}
-      <div className="grid grid-cols-2 gap-2" role="group" aria-label="Framing Mode Selection">
+      {/* Three Mode Buttons */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="group" aria-label="Framing Mode Selection">
         <button
           id="btn-framing-mode-crop"
           type="button"
           disabled={disabled}
           onClick={() => handleModeChange('crop')}
-          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-md text-xs font-semibold transition-all ${
+          className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-md text-xs font-semibold transition-all ${
             currentMode === 'crop'
               ? 'bg-[var(--brand-primary)] text-white shadow-xs'
               : 'bg-[var(--surface-sunken)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border-default)]'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <Crop className="w-3.5 h-3.5" />
-          <span>Crop</span>
+          <Crop className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Crop</span>
         </button>
 
         <button
@@ -79,14 +83,29 @@ export const FramingSelector: React.FC<FramingSelectorProps> = ({
           type="button"
           disabled={disabled}
           onClick={() => handleModeChange('face_tracking')}
-          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-md text-xs font-semibold transition-all ${
+          className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-md text-xs font-semibold transition-all ${
             currentMode === 'face_tracking'
               ? 'bg-[var(--brand-primary)] text-white shadow-xs'
               : 'bg-[var(--surface-sunken)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border-default)]'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <Scan className="w-3.5 h-3.5" />
-          <span>Face Tracking</span>
+          <Scan className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Horizontal Face Tracking</span>
+        </button>
+
+        <button
+          id="btn-framing-mode-dynamic-face-tracking"
+          type="button"
+          disabled={disabled}
+          onClick={() => handleModeChange('dynamic_face_tracking')}
+          className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-md text-xs font-semibold transition-all ${
+            currentMode === 'dynamic_face_tracking'
+              ? 'bg-[var(--brand-primary)] text-white shadow-xs'
+              : 'bg-[var(--surface-sunken)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border-default)]'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <Focus className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Dynamic Face Tracking</span>
         </button>
       </div>
 
@@ -97,12 +116,19 @@ export const FramingSelector: React.FC<FramingSelectorProps> = ({
             <p className="font-semibold text-[var(--text-primary)] mb-1">Crop</p>
             <p>Manually control the horizontal and vertical framing position in the live preview.</p>
           </div>
+        ) : currentMode === 'dynamic_face_tracking' ? (
+          <div>
+            <p className="font-semibold text-[var(--text-primary)] mb-1">Dynamic Face Tracking</p>
+            <p>
+              Follows the speaker's head in both horizontal and vertical directions with natural,
+              moderate face-focused zoom.
+            </p>
+          </div>
         ) : (
           <div>
-            <p className="font-semibold text-[var(--text-primary)] mb-1">Face Tracking</p>
+            <p className="font-semibold text-[var(--text-primary)] mb-1">Horizontal Face Tracking</p>
             <p>
-              Automatically follows the current speaker when possible and maintains a suitable face
-              target when speaker detection is uncertain.
+              Automatically follows the current speaker horizontally while maintaining standard vertical framing.
             </p>
           </div>
         )}
