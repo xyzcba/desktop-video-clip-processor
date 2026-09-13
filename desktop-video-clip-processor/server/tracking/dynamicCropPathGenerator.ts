@@ -25,22 +25,22 @@ export const DYNAMIC_CAMERA_PATH_FPS = 30;
  * Smoothing factor for 2D face targets (EMA alpha).
  * Provides responsive, natural head-follow feeling attached to the speaker.
  */
-export const DYNAMIC_TARGET_EMA_ALPHA = 0.28;
+export const DYNAMIC_TARGET_EMA_ALPHA = 0.34;
 
 /**
  * Maximum 2D camera velocity in pixels per second.
  */
-export const DYNAMIC_MAX_VELOCITY_PX_PER_SEC = 600;
+export const DYNAMIC_MAX_VELOCITY_PX_PER_SEC = 700;
 
 /**
  * Maximum 2D camera acceleration in pixels per second squared.
  */
-export const DYNAMIC_MAX_ACCELERATION_PX_PER_SEC2 = 1300;
+export const DYNAMIC_MAX_ACCELERATION_PX_PER_SEC2 = 1600;
 
 /**
  * Maximum 2D camera deceleration in pixels per second squared for smooth settling.
  */
-export const DYNAMIC_MAX_DECELERATION_PX_PER_SEC2 = 1500;
+export const DYNAMIC_MAX_DECELERATION_PX_PER_SEC2 = 1750;
 
 /**
  * Large movement threshold ratio relative to the fixed crop dimension.

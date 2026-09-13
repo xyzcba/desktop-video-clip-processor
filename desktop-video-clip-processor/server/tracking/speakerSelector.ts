@@ -196,6 +196,12 @@ export function computeDynamicSpeakerTrajectory(
   const DYNAMIC_SWITCH_DELAY_SEC = 1.1; // Must speak continuously for >= 1.1s to establish switch
   const STABILIZATION_WINDOW_SEC = 1.8; // Prevent rapid oscillation right after a switch
   const DYNAMIC_PAUSE_HOLD_SEC = 1.6; // Hold current speaker through pauses up to 1.6s
+  const FACE_DETECTION_FRESHNESS_SEC = 0.7; // ~0.6-0.75s tolerance for 2 FPS sparse face detection
+
+  const isDetectionFresh = (pt: { timestamp: number } | null, curT: number): boolean => {
+    if (!pt) return false;
+    return Math.abs(pt.timestamp - curT) <= FACE_DETECTION_FRESHNESS_SEC;
+  };
 
   let currentSpeakerTrackId: number = sortedTracks[0].id;
   let currentCandidateTrackId: number | null = null;
@@ -210,7 +216,7 @@ export function computeDynamicSpeakerTrajectory(
       lastSpeechDetectedTime = t;
     }
 
-    // Find all tracks alive at time t (with grace window for occlusion)
+    // Find all tracks alive at time t (with grace window for occlusion and speaker continuity)
     const aliveTracks = sortedTracks.filter(
       (tr) => t >= tr.firstTimestamp - 0.25 && t <= tr.lastSeenTimestamp + 1.5
     );
@@ -235,12 +241,32 @@ export function computeDynamicSpeakerTrajectory(
       currentCandidateTrackId = null;
 
       const pt = getClosestPoint(singleTrack, t);
-      trajectory.push({
-        timestamp: t,
-        trackId: singleTrack.id,
-        faceCenter: pt ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 } : singleTrack.smoothedCenter,
-        faceSize: pt ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 } : singleTrack.averageSize,
-      });
+      const fresh = isDetectionFresh(pt, t);
+      const lastPoint = trajectory.length > 0 ? trajectory[trajectory.length - 1] : null;
+
+      if (fresh && pt) {
+        trajectory.push({
+          timestamp: t,
+          trackId: singleTrack.id,
+          faceCenter: { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 },
+          faceSize: { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 },
+        });
+      } else if (lastPoint) {
+        // Hold last valid trajectory target when face is temporarily not fresh (avoid jumping to stale coordinates)
+        trajectory.push({
+          timestamp: t,
+          trackId: singleTrack.id,
+          faceCenter: { ...lastPoint.faceCenter },
+          faceSize: { ...lastPoint.faceSize },
+        });
+      } else {
+        trajectory.push({
+          timestamp: t,
+          trackId: singleTrack.id,
+          faceCenter: pt ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 } : singleTrack.smoothedCenter,
+          faceSize: pt ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 } : singleTrack.averageSize,
+        });
+      }
       continue;
     }
 
@@ -250,7 +276,8 @@ export function computeDynamicSpeakerTrajectory(
 
     for (const track of aliveTracks) {
       const pt = getClosestPoint(track, t);
-      const mouthMotion = pt ? pt.mouthMotion : 0;
+      const fresh = isDetectionFresh(pt, t);
+      const mouthMotion = (fresh && pt) ? pt.mouthMotion : 0;
       const faceArea = track.averageSize.width * track.averageSize.height;
 
       // Distance from horizontal center (0.5)
@@ -300,13 +327,32 @@ export function computeDynamicSpeakerTrajectory(
 
     const currentTrack = aliveTracks.find((tr) => tr.id === currentSpeakerTrackId) || aliveTracks[0];
     const pt = getClosestPoint(currentTrack, t);
+    const fresh = isDetectionFresh(pt, t);
+    const lastPoint = trajectory.length > 0 ? trajectory[trajectory.length - 1] : null;
 
-    trajectory.push({
-      timestamp: t,
-      trackId: currentTrack.id,
-      faceCenter: pt ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 } : currentTrack.smoothedCenter,
-      faceSize: pt ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 } : currentTrack.averageSize,
-    });
+    if (fresh && pt) {
+      trajectory.push({
+        timestamp: t,
+        trackId: currentTrack.id,
+        faceCenter: { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 },
+        faceSize: { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 },
+      });
+    } else if (lastPoint) {
+      // Hold last valid trajectory target when face is temporarily not fresh (avoid jumping to stale coordinates)
+      trajectory.push({
+        timestamp: t,
+        trackId: currentTrack.id,
+        faceCenter: { ...lastPoint.faceCenter },
+        faceSize: { ...lastPoint.faceSize },
+      });
+    } else {
+      trajectory.push({
+        timestamp: t,
+        trackId: currentTrack.id,
+        faceCenter: pt ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 } : currentTrack.smoothedCenter,
+        faceSize: pt ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 } : currentTrack.averageSize,
+      });
+    }
   }
 
   return trajectory;
