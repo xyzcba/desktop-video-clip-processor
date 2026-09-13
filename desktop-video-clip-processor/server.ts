@@ -28,6 +28,7 @@ import {
 } from './server/sessionManager';
 import { getWorkstationTempDir, validateAllResources } from './server/resourcePaths';
 import { validateViralClipsJson } from './src/utils/jsonValidator';
+import { preloadWhisperModel } from './server/whisperService';
 
 const app = express();
 const PORT = 3000;
@@ -596,6 +597,8 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Video Processor Workstation running at http://0.0.0.0:${PORT}`);
+    // Asynchronously pre-warm local Whisper model
+    preloadWhisperModel();
   });
 }
 

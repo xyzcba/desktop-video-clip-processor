@@ -24,7 +24,7 @@ import {
   calculateTargetResolution,
   probeVideoFile,
 } from './ffmpegService';
-import { transcribeAudioFile } from './whisperService';
+import { transcribeAudioFile, preloadWhisperModel } from './whisperService';
 import { getDownloadsDirectory, getWorkstationTempDir } from './resourcePaths';
 import { DEFAULT_CAPTION_CONFIG, WordTimestamp } from '../src/caption/captionTypes';
 import { DEFAULT_FRAMING_CONFIG, FramingConfig } from '../src/framing/framingTypes';
@@ -106,6 +106,10 @@ export function createSession(): ProjectSession {
 
   sessions.set(sessionId, session);
   activeAbortControllers.set(sessionId, {});
+
+  // Pre-warm the local Whisper model in background so user doesn't wait on first transcription
+  preloadWhisperModel();
+
   return session;
 }
 
