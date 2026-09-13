@@ -5,11 +5,19 @@ import { CropKeyframe } from './trackingTypes';
 import { OutputAspectRatio } from '../../src/caption/captionTypes';
 
 // ============================================================================
-// DYNAMIC FACE TRACKING CONFIGURATION (2D PAN/TILT + NATURAL MODERATE ZOOM)
+// DYNAMIC FACE TRACKING CONFIGURATION (2D PAN/TILT + FIXED MODERATE ZOOM)
 // ============================================================================
 /**
+ * Fixed moderate zoom factor for Dynamic Face Tracking.
+ * Keeps the speaker's face/head naturally in focus without extreme close-up.
+ * Crop width and height remain CONSTANT throughout the clip to avoid FFmpeg
+ * filtergraph re-initialization bottlenecks.
+ */
+export const DYNAMIC_BASE_ZOOM = 1.25;
+
+/**
  * Sampling rate for dynamic camera path keyframes emitted to FFmpeg sendcmd (30 FPS).
- * Produces frame-by-frame liquid smooth 2D tracking and zoom without altering video FPS.
+ * Produces frame-by-frame liquid smooth 2D tracking without altering video FPS.
  */
 export const DYNAMIC_CAMERA_PATH_FPS = 30;
 
@@ -35,7 +43,7 @@ export const DYNAMIC_MAX_ACCELERATION_PX_PER_SEC2 = 1300;
 export const DYNAMIC_MAX_DECELERATION_PX_PER_SEC2 = 1500;
 
 /**
- * Large movement threshold ratio relative to reference crop dimension.
+ * Large movement threshold ratio relative to the fixed crop dimension.
  * Movements exceeding this threshold (e.g. speaker switch across the room) snap immediately.
  */
 export const DYNAMIC_SNAP_DISTANCE_RATIO = 0.55;
@@ -45,17 +53,6 @@ export const DYNAMIC_SNAP_DISTANCE_RATIO = 0.55;
  */
 export const DYNAMIC_DEADBAND_PIXELS = 18;
 
-/**
- * Default moderate zoom factor. Keeps speaker's face naturally focused without extreme close-up.
- */
-export const DYNAMIC_BASE_ZOOM = 1.25;
-
-/**
- * Zoom bounds: guaranteed moderate creator framing (never extreme close-up, never zoom out past 1.0).
- */
-export const DYNAMIC_MIN_ZOOM = 1.15;
-export const DYNAMIC_MAX_ZOOM = 1.35;
-
 export interface DynamicCameraMotionOptions {
   cameraPathFps?: number;
   emaAlpha?: number;
@@ -64,14 +61,15 @@ export interface DynamicCameraMotionOptions {
   maxDecelerationPxPerSec2?: number;
   snapDistanceRatio?: number;
   deadbandPixels?: number;
-  baseZoom?: number;
+  zoom?: number;
 }
 
 /**
- * Calculates crop dimensions matching the target aspect ratio at a specified zoom scale.
+ * Calculates FIXED crop dimensions matching the target aspect ratio at a fixed moderate zoom.
  * Preserves exact aspect ratio to ensure zero stretching and zero distortion when scaled.
+ * The dimensions remain constant for the entire clip.
  */
-export function calculateZoomedCropDimensions(
+export function calculateFixedDynamicCropDimensions(
   sourceWidth: number,
   sourceHeight: number,
   aspectRatio: OutputAspectRatio = '9:16',
@@ -79,7 +77,7 @@ export function calculateZoomedCropDimensions(
 ): { cropWidth: number; cropHeight: number } {
   const sW = Math.max(2, sourceWidth || 1920);
   const sH = Math.max(2, sourceHeight || 1080);
-  const clampedZoom = Math.max(DYNAMIC_MIN_ZOOM, Math.min(DYNAMIC_MAX_ZOOM, zoom));
+  const clampedZoom = Math.max(1.0, zoom || DYNAMIC_BASE_ZOOM);
 
   if (aspectRatio === '16:9') {
     // 16:9 aspect ratio
@@ -123,25 +121,18 @@ export function calculateZoomedCropDimensions(
 }
 
 /**
- * Estimates a stable, natural zoom factor for a given face size.
- * Targets ~26-29% face height in vertical frame, bounded strictly between 1.15 and 1.35.
+ * Backward-compatible alias for calculateFixedDynamicCropDimensions
  */
-function estimateNaturalZoom(faceNormalizedHeight?: number): number {
-  if (!faceNormalizedHeight || faceNormalizedHeight <= 0) {
-    return DYNAMIC_BASE_ZOOM;
-  }
-  const desiredRatio = 0.27;
-  const estimatedZoom = desiredRatio / Math.max(0.18, faceNormalizedHeight);
-  return Math.max(DYNAMIC_MIN_ZOOM, Math.min(DYNAMIC_MAX_ZOOM, Math.round(estimatedZoom * 100) / 100));
-}
+export const calculateZoomedCropDimensions = calculateFixedDynamicCropDimensions;
 
 /**
- * Generates dynamic 2D (horizontal + vertical) crop keyframes with moderate, natural face zoom.
- * - Continuous 2D position + velocity state integration with kinematic acceleration and braking
+ * Generates dynamic 2D (horizontal + vertical) crop keyframes with fixed moderate face zoom.
+ * - Uses a CONSTANT cropWidth and cropHeight for the entire clip (no runtime w/h reconfiguration)
  * - Tracks the speaker's head movement both horizontally (left/right) and vertically (up/down)
- * - Moderate face-focused zoom remains stable and natural without dizzying in/out fluctuations
- * - Distance-based large-movement snapping preserves instant cuts on wide speaker transitions
- * - Mathematical bounds guarantee crops never exceed source boundaries or distort
+ * - Emits ONLY runtime 'crop x' and 'crop y' commands in the sendcmd timeline
+ * - Smooth camera following for normal/moderate movement via 2D position + velocity dynamics
+ * - Distance-based snapping for large repositioning / established speaker transitions
+ * - Bounded strictly inside source video dimensions with mathematical precision
  */
 export function generateDynamicSmoothCropPath(
   trajectory: TargetSpeakerTrajectoryPoint[],
@@ -153,16 +144,23 @@ export function generateDynamicSmoothCropPath(
   clipId: string | number,
   options?: DynamicCameraMotionOptions
 ): { keyframes: CropKeyframe[]; sendcmdFilePath: string; cropFilter: string } {
-  // If no trajectory points detected, fallback safely to center with standard moderate zoom
+  const zoom = options?.zoom ?? DYNAMIC_BASE_ZOOM;
+
+  // 1. Calculate ONE FIXED crop width and height for the entire clip
+  const { cropWidth, cropHeight } = calculateFixedDynamicCropDimensions(
+    sourceWidth,
+    sourceHeight,
+    aspectRatio,
+    zoom
+  );
+
+  const maxX = Math.max(0, sourceWidth - cropWidth);
+  const maxY = Math.max(0, sourceHeight - cropHeight);
+
+  // Fallback: If no trajectory points detected, center safely with the fixed zoom
   if (trajectory.length === 0) {
-    const { cropWidth, cropHeight } = calculateZoomedCropDimensions(
-      sourceWidth,
-      sourceHeight,
-      aspectRatio,
-      DYNAMIC_BASE_ZOOM
-    );
-    const defaultX = Math.round(Math.max(0, sourceWidth - cropWidth) / 4) * 2;
-    const defaultY = Math.round(Math.max(0, sourceHeight - cropHeight) / 4) * 2;
+    const defaultX = Math.round(maxX / 4) * 2;
+    const defaultY = Math.round(maxY / 4) * 2;
     return {
       keyframes: [{ timestamp: 0, x: defaultX, y: defaultY, width: cropWidth, height: cropHeight }],
       sendcmdFilePath: '',
@@ -170,29 +168,9 @@ export function generateDynamicSmoothCropPath(
     };
   }
 
-  // Precalculate stable zoom per track to prevent distracting zoom breathing
-  const trackZoomMap = new Map<number, number>();
-  for (const pt of trajectory) {
-    if (!trackZoomMap.has(pt.trackId)) {
-      const zoom = estimateNaturalZoom(pt.faceSize?.height);
-      trackZoomMap.set(pt.trackId, zoom);
-    }
-  }
-
-  // 1. Calculate raw target boxes for each trajectory waypoint
+  // 2. Calculate raw target X and Y for each trajectory waypoint
   const rawWaypoints = trajectory
     .map((pt) => {
-      const trackZoom = trackZoomMap.get(pt.trackId) ?? DYNAMIC_BASE_ZOOM;
-      const { cropWidth, cropHeight } = calculateZoomedCropDimensions(
-        sourceWidth,
-        sourceHeight,
-        aspectRatio,
-        trackZoom
-      );
-
-      const maxX = Math.max(0, sourceWidth - cropWidth);
-      const maxY = Math.max(0, sourceHeight - cropHeight);
-
       const facePxX = pt.faceCenter.x * sourceWidth;
       const facePxY = pt.faceCenter.y * sourceHeight;
 
@@ -208,8 +186,6 @@ export function generateDynamicSmoothCropPath(
         trackId: pt.trackId,
         targetX: clampedX,
         targetY: clampedY,
-        cropW: cropWidth,
-        cropH: cropHeight,
       };
     })
     .sort((a, b) => a.timestamp - b.timestamp);
@@ -228,11 +204,14 @@ export function generateDynamicSmoothCropPath(
   const totalFrames = Math.ceil(clipDurationSec * fps);
   const keyframes: CropKeyframe[] = [];
 
-  // Initial state from first waypoint
+  // Fixed reference dimension for snap and deadband thresholds
+  const refDim = Math.min(cropWidth, cropHeight);
+  const largeMovementThreshold = Math.round(refDim * snapRatio);
+  const deadband = Math.max(baseDeadband, Math.round(refDim * 0.035));
+
+  // Initial continuous camera state
   let currentCameraX = rawWaypoints[0].targetX;
   let currentCameraY = rawWaypoints[0].targetY;
-  let currentCropW = rawWaypoints[0].cropW;
-  let currentCropH = rawWaypoints[0].cropH;
   let currentVx = 0;
   let currentVy = 0;
 
@@ -240,8 +219,6 @@ export function generateDynamicSmoothCropPath(
   let smoothedTargetY = currentCameraY;
   let activeRawTargetX = currentCameraX;
   let activeRawTargetY = currentCameraY;
-  let activeRawCropW = currentCropW;
-  let activeRawCropH = currentCropH;
 
   let wpIdx = 0;
 
@@ -254,12 +231,6 @@ export function generateDynamicSmoothCropPath(
       const nextWp = rawWaypoints[wpIdx];
       const candX = nextWp.targetX;
       const candY = nextWp.targetY;
-      const candW = nextWp.cropW;
-      const candH = nextWp.cropH;
-
-      const refDim = Math.min(currentCropW, currentCropH);
-      const largeMovementThreshold = Math.round(refDim * snapRatio);
-      const deadband = Math.max(baseDeadband, Math.round(refDim * 0.035));
 
       // 2D distance from camera's actual continuous position
       const distFromCamera = Math.hypot(candX - currentCameraX, candY - currentCameraY);
@@ -268,14 +239,10 @@ export function generateDynamicSmoothCropPath(
         // LARGE MOVEMENT / WIDE SPEAKER SWITCH: Snap immediately!
         currentCameraX = candX;
         currentCameraY = candY;
-        currentCropW = candW;
-        currentCropH = candH;
         smoothedTargetX = candX;
         smoothedTargetY = candY;
         activeRawTargetX = candX;
         activeRawTargetY = candY;
-        activeRawCropW = candW;
-        activeRawCropH = candH;
         currentVx = 0;
         currentVy = 0;
       } else {
@@ -284,21 +251,15 @@ export function generateDynamicSmoothCropPath(
         if (distFromActive > deadband) {
           activeRawTargetX = candX;
           activeRawTargetY = candY;
-          activeRawCropW = candW;
-          activeRawCropH = candH;
         }
       }
     }
 
     // Advance 2D kinematic dynamics (for f > 0)
     if (f > 0) {
-      // 1. Advance EMA smoothed target in both horizontal and vertical axes
+      // 1. Advance EMA smoothed target in both X and Y
       smoothedTargetX += (activeRawTargetX - smoothedTargetX) * effectiveEmaAlpha;
       smoothedTargetY += (activeRawTargetY - smoothedTargetY) * effectiveEmaAlpha;
-
-      // Smoothly transition crop dimensions (gentle zoom transition between speakers)
-      currentCropW += (activeRawCropW - currentCropW) * Math.min(1.0, effectiveEmaAlpha * 0.4);
-      currentCropH += (activeRawCropH - currentCropH) * Math.min(1.0, effectiveEmaAlpha * 0.4);
 
       // 2. Vector from current camera position to smoothed target
       const dx = smoothedTargetX - currentCameraX;
@@ -364,13 +325,7 @@ export function generateDynamicSmoothCropPath(
       }
     }
 
-    // Align crop dimensions to even numbers and clamp inside frame
-    const finalW = Math.max(120, Math.min(sourceWidth, Math.round(currentCropW / 2) * 2));
-    const finalH = Math.max(120, Math.min(sourceHeight, Math.round(currentCropH / 2) * 2));
-
-    const maxX = Math.max(0, sourceWidth - finalW);
-    const maxY = Math.max(0, sourceHeight - finalH);
-
+    // Clamp coordinates strictly inside frame boundaries and align to even pixels
     const finalX = Math.max(0, Math.min(maxX, Math.round(currentCameraX / 2) * 2));
     const finalY = Math.max(0, Math.min(maxY, Math.round(currentCameraY / 2) * 2));
 
@@ -378,19 +333,27 @@ export function generateDynamicSmoothCropPath(
       timestamp: t,
       x: finalX,
       y: finalY,
-      width: finalW,
-      height: finalH,
+      width: cropWidth,
+      height: cropHeight,
     });
   }
 
-  // 2. Write FFmpeg sendcmd timeline command script
+  // 3. Write FFmpeg sendcmd timeline script with ONLY runtime X and Y commands
+  // Omitting redundant duplicate commands when camera is stationary avoids unnecessary FFmpeg filter dispatch
   let cmdText = '';
-  for (const kf of keyframes) {
-    const timeStr = kf.timestamp.toFixed(3);
-    cmdText += `${timeStr} [enter] crop x ${kf.x};\n`;
-    cmdText += `${timeStr} [enter] crop y ${kf.y};\n`;
-    cmdText += `${timeStr} [enter] crop w ${kf.width};\n`;
-    cmdText += `${timeStr} [enter] crop h ${kf.height};\n`;
+  let lastEmittedX = -1;
+  let lastEmittedY = -1;
+
+  for (let i = 0; i < keyframes.length; i++) {
+    const kf = keyframes[i];
+    // Always emit the first frame, last frame, or whenever position changes
+    if (i === 0 || i === keyframes.length - 1 || kf.x !== lastEmittedX || kf.y !== lastEmittedY) {
+      const timeStr = kf.timestamp.toFixed(3);
+      cmdText += `${timeStr} [enter] crop x ${kf.x};\n`;
+      cmdText += `${timeStr} [enter] crop y ${kf.y};\n`;
+      lastEmittedX = kf.x;
+      lastEmittedY = kf.y;
+    }
   }
 
   const sendcmdDir = path.join(workingDir, 'dynamic_tracking_cmds');
@@ -405,10 +368,9 @@ export function generateDynamicSmoothCropPath(
   const escapedCmdPath = sendcmdFilePath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
   const initialX = keyframes[0].x;
   const initialY = keyframes[0].y;
-  const initialW = keyframes[0].width;
-  const initialH = keyframes[0].height;
 
-  const cropFilter = `sendcmd=f='${escapedCmdPath}',crop=w=${initialW}:h=${initialH}:x=${initialX}:y=${initialY}`;
+  // FFmpeg crop filter initialized with constant crop dimensions and initial position
+  const cropFilter = `sendcmd=f='${escapedCmdPath}',crop=w=${cropWidth}:h=${cropHeight}:x=${initialX}:y=${initialY}`;
 
   return {
     keyframes,
