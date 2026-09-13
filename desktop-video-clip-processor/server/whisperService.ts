@@ -62,19 +62,22 @@ function ensureOnnxConfigured() {
       actualOrt.env.logLevel = 'error';
     }
 
-    // Intercept session creation to tune thread scheduling and graph optimization
-    // for low-core / dual-core CPUs (e.g. Intel Celeron N4500)
+    // Intercept session creation to tune thread scheduling, graph optimization, and execution mode
     if (actualOrt.InferenceSession?.create) {
       const originalCreate = actualOrt.InferenceSession.create;
       actualOrt.InferenceSession.create = async function (model: any, options: any) {
         const cpuCount = os.cpus()?.length || 2;
-        // On 2-core / 2-thread CPUs, 1-2 worker threads avoids thread thrashing with the Node.js event loop
-        const optimalIntraThreads = Math.max(1, Math.min(2, cpuCount));
+        // Scale intra-op thread pool with available CPU cores (capped at 8) for optimal GEMM parallelization
+        const optimalIntraThreads = Math.max(1, Math.min(8, cpuCount));
         const tunedOptions = {
           ...options,
           intraOpNumThreads: optimalIntraThreads,
           interOpNumThreads: 1,
           graphOptimizationLevel: 'all',
+          enableCpuMemArena: true,
+          enableMemPattern: true,
+          executionMode: 'sequential',
+          logSeverityLevel: 3,
         };
         return originalCreate.call(this, model, tunedOptions);
       };
@@ -292,7 +295,7 @@ export async function transcribeAudioFile(
   const output = await transcriber(float32Samples, {
     return_timestamps: 'word',
     chunk_length_s: 30,
-    stride_length_s: 5,
+    stride_length_s: 2,
   });
   const inferenceMs = Date.now() - inferenceStart;
 
