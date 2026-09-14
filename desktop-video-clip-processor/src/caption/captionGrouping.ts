@@ -121,6 +121,79 @@ export function groupWordsForCaption(
     flushGroup();
   }
 
-  return groups;
+  return normalizeCaptionTimeline(groups);
+}
+
+/**
+ * Normalizes the visual caption timeline to prevent simultaneous caption overlaps on screen.
+ *
+ * General Rule:
+ * - Caption groups are processed chronologically.
+ * - When a newer caption group starts while an existing caption group is still active,
+ *   the previous caption's effective end time is truncated to the newer caption's start time (replacement).
+ * - Caption B then becomes the active caption.
+ * - If truncation leaves a caption with zero or negligible visual duration (< 0.05s / 50ms),
+ *   it is discarded safely to prevent visual flicker or negative/zero durations.
+ * - Non-overlapping captions preserve their exact timing.
+ * - The original Whisper transcript and word timestamps in `group.words` remain untouched.
+ */
+export function normalizeCaptionTimeline(groups: CaptionGroup[]): CaptionGroup[] {
+  if (!groups || groups.length === 0) {
+    return [];
+  }
+
+  // Sort deterministically in chronological order
+  const sorted = [...groups].sort((a, b) => a.startSec - b.startSec || a.id - b.id);
+  const resolved: CaptionGroup[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const rawCurrent = sorted[i];
+    const currentStart = Math.round(rawCurrent.startSec * 1000) / 1000;
+    const currentEnd = Math.round(rawCurrent.endSec * 1000) / 1000;
+
+    // Discard any fundamentally invalid input group where end <= start or duration < 50ms
+    if (currentEnd - currentStart < 0.05) {
+      continue;
+    }
+
+    const current: CaptionGroup = {
+      ...rawCurrent,
+      startSec: currentStart,
+      endSec: currentEnd,
+    };
+
+    // Resolve overlaps against preceding active captions in chronological order
+    while (resolved.length > 0) {
+      const prev = resolved[resolved.length - 1];
+
+      // If current starts at or before prev's startSec, prev has no valid display window before current
+      if (current.startSec <= prev.startSec) {
+        resolved.pop();
+        continue;
+      }
+
+      // If current starts before prev ends, truncate prev's effective end time to current's start time
+      if (current.startSec < prev.endSec) {
+        prev.endSec = current.startSec;
+
+        // If truncation leaves prev with zero or negligible visual duration (< 50ms), discard safely
+        if (prev.endSec - prev.startSec < 0.05) {
+          resolved.pop();
+          continue;
+        }
+      }
+
+      break;
+    }
+
+    resolved.push(current);
+  }
+
+  // Re-index ids sequentially to maintain clean 1-based ordering
+  for (let i = 0; i < resolved.length; i++) {
+    resolved[i].id = i + 1;
+  }
+
+  return resolved;
 }
 

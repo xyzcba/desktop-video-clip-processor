@@ -196,12 +196,14 @@ export function generateAssSubtitleFile(
         const wIdx = pw.originalIndex;
         const activeWord = group.words[wIdx];
 
-        // Contiguous active time window for this word
-        const wordStart = wIdx === 0 ? groupDurationStart : activeWord.start;
-        const nextWordStart =
+        // Contiguous active time window for this word, strictly bounded by the group's effective timeline
+        const rawWordStart = wIdx === 0 ? groupDurationStart : activeWord.start;
+        const wordStart = Math.min(groupDurationEnd, Math.max(groupDurationStart, rawWordStart));
+
+        const rawNextWordStart =
           wIdx + 1 < group.words.length ? group.words[wIdx + 1].start : groupDurationEnd;
-        const wordEnd = Math.max(wordStart + 0.05, nextWordStart);
-        const wordDurationMs = Math.round((wordEnd - wordStart) * 1000);
+        const nextWordStart = Math.min(groupDurationEnd, Math.max(wordStart, rawNextWordStart));
+        const wordEnd = Math.min(groupDurationEnd, Math.max(wordStart, nextWordStart));
 
         const stableWordIdx = globalWordCounter + wIdx;
         const highlightHex = getWordHighlightColor(
@@ -210,7 +212,6 @@ export function generateAssSubtitleFile(
           stableWordIdx
         );
         const highlightColorAss = hexToAssColor(highlightHex, '00');
-        const animSpec = getActiveWordAnimationSpec(config.highlightAnimation, wordDurationMs);
 
         // 1. Inactive before active window (if not the first word)
         if (wordStart > groupDurationStart) {
@@ -220,9 +221,13 @@ export function generateAssSubtitleFile(
         }
 
         // 2. Active window with highlight color & animation
-        lines.push(
-          `Dialogue: 1,${formatAssTime(wordStart)},${formatAssTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${pw.centerX},${pw.centerY})\\c${highlightColorAss}${animSpec.assTransitionTags}}${pw.word}`
-        );
+        if (wordEnd > wordStart) {
+          const wordDurationMs = Math.round((wordEnd - wordStart) * 1000);
+          const animSpec = getActiveWordAnimationSpec(config.highlightAnimation, wordDurationMs);
+          lines.push(
+            `Dialogue: 1,${formatAssTime(wordStart)},${formatAssTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${pw.centerX},${pw.centerY})\\c${highlightColorAss}${animSpec.assTransitionTags}}${pw.word}`
+          );
+        }
 
         // 3. Inactive after active window (if not the last word)
         if (wordEnd < groupDurationEnd) {
