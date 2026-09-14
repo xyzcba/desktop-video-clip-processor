@@ -17,6 +17,7 @@ const WaveFile: any =
 
 import {
   patchWhisperPipeline,
+  installWhisperInferenceOptimizations,
   getLastTimestampExtractionDuration,
   resetTimestampMetrics,
 } from './whisperTimestampOptimizer';
@@ -90,6 +91,7 @@ function ensureOnnxConfigured() {
         return originalCreate.call(this, model, tunedOptions);
       };
     }
+    installWhisperInferenceOptimizations();
     onnxConfigured = true;
   } catch (err: any) {
     console.warn('[Whisper] Failed to tune ONNX Runtime options:', err.message);

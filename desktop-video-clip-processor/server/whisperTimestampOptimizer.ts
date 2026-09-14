@@ -268,11 +268,91 @@ export function optimizedExtractTokenTimestamps(
   return timestamps;
 }
 
+// Flag indicating whether global runtime inference fast paths have been installed
+let inferenceOptimizationsInstalled = false;
+
+/**
+ * Installs low-overhead fast-paths for Transformers.js ONNX Whisper inference loop:
+ * 1. Fast contiguous slice for 3D tensors:
+ *    The autoregressive decoder loop calls `output.logits.slice(null, -1, null)` on every token step.
+ *    The default generic implementation loops over all 51,864 vocabulary items with modulo and division.
+ *    The fast-path calculates the direct memory offset and does an instantaneous typed array copy.
+ * 2. Zero-copy Sampler getLogits:
+ *    Reuses the 51,864-element Float32Array instead of allocating and copying 207 KB on every step.
+ */
+export function installWhisperInferenceOptimizations(): void {
+  if (inferenceOptimizationsInstalled) return;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Tensor } = require('@xenova/transformers/src/utils/tensor.js');
+    if (Tensor && Tensor.prototype && !Tensor.prototype._originalSlice) {
+      const origSlice = Tensor.prototype.slice;
+      Tensor.prototype._originalSlice = origSlice;
+
+      Tensor.prototype.slice = function (...slices: any[]) {
+        // Fast path for autoregressive decoder logits: [1, S, V] sliced with [null, -1, null] or [0, -1, null]
+        if (
+          this.dims.length === 3 &&
+          (slices[0] === null || slices[0] === 0 || slices[0] === undefined) &&
+          (slices[2] === null || slices[2] === undefined)
+        ) {
+          const seqDim = this.dims[1];
+          const V = this.dims[2];
+          const slice1 = slices[1];
+
+          if (typeof slice1 === 'number') {
+            const seqIdx = slice1 < 0 ? seqDim + slice1 : slice1;
+            if (seqIdx >= 0 && seqIdx < seqDim) {
+              const offset = seqIdx * V;
+              const sub = this.data.subarray(offset, offset + V);
+              return new Tensor(this.type, sub.slice(), [1, 1, V]);
+            }
+          }
+        }
+
+        return origSlice.apply(this, slices);
+      };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Sampler } = require('@xenova/transformers/src/utils/generation.js');
+    if (Sampler && Sampler.prototype && !Sampler.prototype._originalGetLogits) {
+      const origGetLogits = Sampler.prototype.getLogits;
+      Sampler.prototype._originalGetLogits = origGetLogits;
+
+      Sampler.prototype.getLogits = function (logits: any, index: number) {
+        const vocabSize = logits.dims.at(-1);
+        const logs = logits.data;
+
+        // When extracting the final token logits and the buffer is already exactly vocabSize elements,
+        // reuse the Float32Array directly rather than cloning 51,864 elements via .slice(-vocabSize).
+        if (logs && logs.length === vocabSize && (index === -1 || index === undefined)) {
+          if (this.generation_config?.temperature > 0 && this.generation_config.temperature !== 1) {
+            return logs.map((x: number) => x / this.generation_config.temperature);
+          }
+          return logs;
+        }
+
+        return origGetLogits.call(this, logits, index);
+      };
+    }
+
+    inferenceOptimizationsInstalled = true;
+    console.log('[Whisper] Installed ONNX inference fast-paths (O(1) tensor slice & zero-copy sampler).');
+  } catch (err: any) {
+    console.warn('[Whisper] Could not install inference fast-paths:', err.message);
+  }
+}
+
 /**
  * Patches a Transformers.js Whisper pipeline instance to use the high-performance
- * timestamp extraction algorithm.
+ * timestamp extraction algorithm and ONNX inference optimizations.
  */
 export function patchWhisperPipeline(pipelineInstance: any): void {
+  // Install global tensor and sampler fast-paths for the inference loop
+  installWhisperInferenceOptimizations();
+
   if (!pipelineInstance || !pipelineInstance.model) {
     return;
   }
