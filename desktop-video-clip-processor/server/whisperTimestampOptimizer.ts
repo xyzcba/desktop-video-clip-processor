@@ -13,6 +13,11 @@
  * continuous memory copying, achieving identical numerical results ~35x faster with near-zero GC allocations.
  */
 
+import { createRequire } from 'module';
+
+// Polyfill require for ESM/CJS compatibility
+const requirePolyfill = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+
 // Track timestamp extraction performance for telemetry
 let lastTimestampDurationMs = 0;
 let cumulativeTimestampMs = 0;
@@ -48,8 +53,7 @@ export function optimizedExtractTokenTimestamps(
 ): any {
   const opStart = Date.now();
   // Lazily import Tensor class from transformers utils
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { Tensor } = require('@xenova/transformers/src/utils/tensor.js');
+  const { Tensor } = requirePolyfill('@xenova/transformers/src/utils/tensor.js');
 
   const batchList = generate_outputs.cross_attentions;
   const numBatches = batchList.length;
@@ -284,8 +288,7 @@ export function installWhisperInferenceOptimizations(): void {
   if (inferenceOptimizationsInstalled) return;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Tensor } = require('@xenova/transformers/src/utils/tensor.js');
+    const { Tensor } = requirePolyfill('@xenova/transformers/src/utils/tensor.js');
     if (Tensor && Tensor.prototype && !Tensor.prototype._originalSlice) {
       const origSlice = Tensor.prototype.slice;
       Tensor.prototype._originalSlice = origSlice;
@@ -315,8 +318,7 @@ export function installWhisperInferenceOptimizations(): void {
       };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Sampler } = require('@xenova/transformers/src/utils/generation.js');
+    const { Sampler } = requirePolyfill('@xenova/transformers/src/utils/generation.js');
     if (Sampler && Sampler.prototype && !Sampler.prototype._originalGetLogits) {
       const origGetLogits = Sampler.prototype.getLogits;
       Sampler.prototype._originalGetLogits = origGetLogits;
