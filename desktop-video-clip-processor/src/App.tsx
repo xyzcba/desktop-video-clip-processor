@@ -629,8 +629,12 @@ export default function App() {
       {/* Footer Info */}
       <footer id="app-footer" className="border-t border-[var(--border-default)] ws-panel text-xs py-3 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="ws-muted">
-            Desktop Video Clip Processor • Local Media Engine • 100% On-Device Processing
+          <div className="ws-muted flex items-center gap-2">
+            <span className="font-semibold ws-title">ClipRush</span>
+            <span>•</span>
+            <span>AI Video Clip Workstation</span>
+            <span>•</span>
+            <span>100% On-Device Processing</span>
           </div>
           <div className="text-[11px] font-mono ws-muted">
             Node {systemStatus?.nodeVersion || 'v22'} • {systemStatus?.platform === 'win32' ? 'Windows' : 'Linux'} x64

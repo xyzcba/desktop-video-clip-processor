@@ -23,12 +23,12 @@ interface StepItem {
   icon: React.ElementType;
 }
 
-// Exactly 5-Stage Primary Workflow
+// Exactly 5-Stage Primary Workflow: Video -> Transcription -> AI Highlights -> Clips -> Results
 const STEPS: StepItem[] = [
   {
     key: 'video',
     number: 1,
-    label: 'Video & Output Setup',
+    label: 'Video',
     sublabel: 'Source & Destination',
     icon: FileVideo,
   },
@@ -42,8 +42,8 @@ const STEPS: StepItem[] = [
   {
     key: 'viral_json',
     number: 3,
-    label: 'LLM / Viral Clip JSON',
-    sublabel: 'Prompt & Highlights',
+    label: 'AI Highlights',
+    sublabel: 'Prompt & Clip JSON',
     icon: Sparkles,
   },
   {

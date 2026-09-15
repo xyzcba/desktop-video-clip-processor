@@ -34,7 +34,7 @@ export const DesktopPackagingModal: React.FC<DesktopPackagingModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold ws-title">
-                Windows Desktop Packaging Architecture
+                ClipRush Windows Packaging Architecture
               </h2>
               <p className="text-xs ws-muted">
                 Standalone installer (.exe) with bundled FFmpeg and local ONNX Whisper

@@ -118,8 +118,8 @@ function createWindow(port) {
     height: 880,
     minWidth: 1024,
     minHeight: 720,
-    title: 'Desktop Video Clip Processor',
-    backgroundColor: '#0b0f19',
+    title: 'ClipRush — AI Video Clip Workstation',
+    backgroundColor: '#151720',
     autoHideMenuBar: true,
     webPreferences: {
       preload: fs.existsSync(preloadPath) ? preloadPath : undefined,

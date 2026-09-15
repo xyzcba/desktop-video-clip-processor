@@ -1,6 +1,6 @@
 {
-  "name": "Desktop Video Clip Processor",
-  "description": "Local desktop video processing workstation for audio extraction, local Whisper transcription, SRT transcript generation, customizable aspect ratio framing, and viral caption clip creation using local FFmpeg.",
+  "name": "ClipRush",
+  "description": "Fast AI creative workstation for turning long-form videos into 9:16 vertical viral clips with local Whisper transcription, intelligent framing, and animated captions.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

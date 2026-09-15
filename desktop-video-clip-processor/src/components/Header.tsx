@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Video,
+  Zap,
   Cpu,
   HelpCircle,
   RefreshCw,
@@ -27,17 +27,22 @@ export const Header: React.FC<HeaderProps> = ({
   onNewProject,
 }) => {
   return (
-    <header id="app-header" className="sticky top-0 z-30 shadow-sm transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+    <header id="app-header" className="sticky top-0 z-30 shadow-xs transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-4">
         {/* Brand & Subtitle */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded bg-[var(--brand-primary)] flex items-center justify-center text-white shadow-xs font-bold shrink-0">
-            <Video className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-[var(--brand-primary)] flex items-center justify-center text-white shadow-xs font-bold shrink-0">
+            <Zap className="w-4 h-4 fill-white" />
           </div>
           <div>
-            <h1 id="app-title" className="text-sm sm:text-base font-bold tracking-tight ws-title leading-tight">
-              DESKTOP VIDEO PROCESSOR
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 id="app-title" className="text-base font-bold tracking-tight ws-title leading-tight">
+                ClipRush
+              </h1>
+              <span className="text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.5 rounded bg-[var(--brand-subtle)] text-[var(--brand-text)] border border-[var(--brand-border)]">
+                AI Workstation
+              </span>
+            </div>
             <p className="text-xs ws-muted leading-tight mt-0.5">
               Long-Form to 9:16 Vertical Viral Clips Workstation
             </p>

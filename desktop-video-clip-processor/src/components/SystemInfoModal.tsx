@@ -49,7 +49,7 @@ export const SystemInfoModal: React.FC<SystemInfoModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold ws-title">
-                System Diagnostics & Privacy
+                ClipRush System Diagnostics & Privacy
               </h2>
               <p className="text-xs ws-muted">
                 Local media engine health, Whisper model runtime, and privacy architecture

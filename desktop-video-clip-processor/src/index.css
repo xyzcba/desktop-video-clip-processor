@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   DESKTOP VIDEO PROCESSOR - CENTRALIZED DESIGN TOKEN SYSTEM
-   Refined Consumer Desktop Workstation Design System Architecture
-   Color Philosophy: Friendly, modern, clean, recognizable accent, comfortable surfaces
+   CLIPRUSH - CENTRALIZED DESIGN TOKEN SYSTEM
+   Minimal AI Creative Workstation Design System Architecture
+   Color Philosophy: Crisp electric indigo accent (#5B5FEF), calm desktop surfaces
    ========================================================================== */
 
 /* Indeterminate progress bar animation for honest transcription status */
@@ -34,7 +34,7 @@
 [data-theme="semi-dark"] {
   color-scheme: dark;
 
-  /* App Workspace Canvas - calm neutral twilight charcoal, never pitch black */
+  /* App Workspace Canvas - calm neutral workstation twilight, never pitch black */
   --app-bg: #151720;
 
   /* Unified Surfaces Hierarchy */
@@ -42,9 +42,9 @@
   --surface-default: #1c1f2b;
   --surface-secondary: #181a24;
   --surface-subtle: #12141c;
-  --surface-elevated: #242736;
-  --surface-hover: #25293a;
-  --surface-active: #2e3348;
+  --surface-elevated: #242838;
+  --surface-hover: #252a3b;
+  --surface-active: #2e344a;
 
   /* Consistent Borders */
   --border-subtle: rgba(255, 255, 255, 0.06);
@@ -57,13 +57,13 @@
   --text-muted: #788096;
   --text-inverse: #ffffff;
 
-  /* Brand Colors (Friendly, Modern Blurple / Indigo Accent) */
-  --brand-primary: #5865f2;
-  --brand-hover: #4752c4;
-  --brand-active: #3c45a5;
-  --brand-subtle: rgba(88, 101, 242, 0.13);
-  --brand-border: rgba(88, 101, 242, 0.32);
-  --brand-text: #9eaaff;
+  /* ClipRush Brand Colors (Electric Indigo Accent #5B5FEF) */
+  --brand-primary: #5b5fef;
+  --brand-hover: #4b4fe0;
+  --brand-active: #3d41cc;
+  --brand-subtle: rgba(91, 95, 239, 0.12);
+  --brand-border: rgba(91, 95, 239, 0.28);
+  --brand-text: #969aff;
 
   /* Semantic Feedback */
   --success-subtle: rgba(16, 185, 129, 0.13);
@@ -89,12 +89,12 @@
   --input-border: rgba(255, 255, 255, 0.12);
   --input-text: #f2f4f8;
   --input-placeholder: #5d647a;
-  --input-focus-border: #5865f2;
-  --focus-ring: 0 0 0 2px rgba(88, 101, 242, 0.28);
+  --input-focus-border: #5b5fef;
+  --focus-ring: 0 0 0 2px rgba(91, 95, 239, 0.28);
 
   /* Button System */
   --btn-secondary-bg: #1c1f2b;
-  --btn-secondary-hover: #25293a;
+  --btn-secondary-hover: #252a3b;
   --btn-secondary-text: #e2e5f0;
   --btn-secondary-border: rgba(255, 255, 255, 0.12);
 
@@ -125,27 +125,27 @@
 
 /* ==========================================================================
    THEME 2: LIGHT (Clean, Soft Desktop Workstation Theme)
-   Soft neutral light canvas with crisp contrast — NOT harsh, glaring, or yellowed
+   Soft neutral light canvas (#F6F7FB) with crisp contrast
    ========================================================================== */
 [data-theme="light"] {
   color-scheme: light;
 
   /* App Workspace Canvas */
-  --app-bg: #f3f4f8;
+  --app-bg: #f6f7fb;
 
   /* Surfaces */
   --surface-primary: #ffffff;
   --surface-default: #ffffff;
-  --surface-secondary: #f8f9fc;
-  --surface-subtle: #edf0f6;
+  --surface-secondary: #f8f9fd;
+  --surface-subtle: #eef1f8;
   --surface-elevated: #ffffff;
-  --surface-hover: #f1f3f8;
-  --surface-active: #e5e8f1;
+  --surface-hover: #f1f3fa;
+  --surface-active: #e4e7f3;
 
   /* Borders */
-  --border-subtle: #e6e9f1;
-  --border-default: #d3d8e5;
-  --border-strong: #b7bed0;
+  --border-subtle: #e5e8f2;
+  --border-default: #d1d6e5;
+  --border-strong: #b5bdd2;
 
   /* Typography */
   --text-primary: #141722;
@@ -153,13 +153,13 @@
   --text-muted: #6e768e;
   --text-inverse: #ffffff;
 
-  /* Brand Colors (Vivid, Recognizable Brand Indigo) */
-  --brand-primary: #5865f2;
-  --brand-hover: #4752c4;
-  --brand-active: #3c45a5;
-  --brand-subtle: #eef0fe;
-  --brand-border: #c8ceff;
-  --brand-text: #4752c4;
+  /* Brand Colors (Vivid, Recognizable Brand Indigo #5B5FEF) */
+  --brand-primary: #5b5fef;
+  --brand-hover: #4b4fe0;
+  --brand-active: #3d41cc;
+  --brand-subtle: #eeeffe;
+  --brand-border: #c8ccfc;
+  --brand-text: #4b4fe0;
 
   /* Semantic Feedback */
   --success-subtle: #ecfdf5;
@@ -185,8 +185,8 @@
   --input-border: #cbd2e0;
   --input-text: #141722;
   --input-placeholder: #8b93a8;
-  --input-focus-border: #5865f2;
-  --focus-ring: 0 0 0 2px rgba(88, 101, 242, 0.20);
+  --input-focus-border: #5b5fef;
+  --focus-ring: 0 0 0 2px rgba(91, 95, 239, 0.20);
 
   /* Button System */
   --btn-secondary-bg: #ffffff;
@@ -229,7 +229,7 @@
   background-color: var(--app-bg);
   color: var(--text-primary);
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* Main Workspace Panels */

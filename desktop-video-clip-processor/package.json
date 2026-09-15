@@ -46,8 +46,8 @@
     "vite": "^6.2.3"
   },
   "build": {
-    "appId": "com.desktop.videoprocessor",
-    "productName": "Desktop Video Clip Processor",
+    "appId": "com.cliprush.app",
+    "productName": "ClipRush",
     "directories": {
       "output": "release"
     },
@@ -98,7 +98,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Desktop Video Clip Processor"
+      "shortcutName": "ClipRush"
     }
   }
 }
