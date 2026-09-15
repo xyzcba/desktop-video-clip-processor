@@ -5,7 +5,7 @@ import {
   Sparkles,
   Scissors,
   CheckCircle2,
-  ChevronRight,
+  Check,
 } from 'lucide-react';
 import { AppStep, ProjectSession } from '../types';
 
@@ -23,41 +23,41 @@ interface StepItem {
   icon: React.ElementType;
 }
 
-// Exactly 5-Stage Primary Workflow: Video -> Transcription -> AI Highlights -> Clips -> Results
+// 5-Stage Rush Creative Workstation Pipeline
 const STEPS: StepItem[] = [
   {
     key: 'video',
     number: 1,
-    label: 'Video',
-    sublabel: 'Source & Destination',
+    label: 'VIDEO',
+    sublabel: 'Source & Output',
     icon: FileVideo,
   },
   {
     key: 'transcription',
     number: 2,
-    label: 'Transcription',
-    sublabel: 'Speech Subtitles',
+    label: 'TRANSCRIPTION',
+    sublabel: 'Speech & Subtitles',
     icon: Mic,
   },
   {
     key: 'viral_json',
     number: 3,
-    label: 'AI Highlights',
-    sublabel: 'Prompt & Clip JSON',
+    label: 'AI HIGHLIGHTS',
+    sublabel: 'Curate Moments',
     icon: Sparkles,
   },
   {
     key: 'clip_generation',
     number: 4,
-    label: 'Clip Generation',
-    sublabel: '9:16 Vertical Video',
+    label: 'CLIP GENERATION',
+    sublabel: 'Render Clips',
     icon: Scissors,
   },
   {
     key: 'results',
     number: 5,
-    label: 'Results',
-    sublabel: 'Player & Details',
+    label: 'RESULTS',
+    sublabel: 'Review & Export',
     icon: CheckCircle2,
   },
 ];
@@ -99,12 +99,17 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
   };
 
   return (
-    <nav id="workflow-step-indicator" aria-label="Workflow Steps" className="py-2.5 px-4 sm:px-6 transition-colors">
-      <div className="max-w-7xl mx-auto flex items-center justify-between overflow-x-auto gap-2 no-scrollbar">
+    <nav
+      id="workflow-step-indicator"
+      aria-label="Workflow Steps"
+      className="border-b border-[var(--border-default)] bg-[var(--surface-primary)] px-4 sm:px-6 lg:px-8 py-2 transition-colors select-none"
+    >
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-1 sm:gap-2">
         {STEPS.map((step, idx) => {
           const status = getStepStatus(step.key);
-          const Icon = step.icon;
           const isClickable = status !== 'disabled';
+          const isCompleted = status === 'completed';
+          const isActive = status === 'active';
 
           return (
             <React.Fragment key={step.key}>
@@ -112,44 +117,77 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
                 id={`step-button-${step.key}`}
                 onClick={() => isClickable && onSelectStep(step.key)}
                 disabled={!isClickable}
-                className={`flex items-center gap-2.5 px-3 py-1.5 rounded text-left transition whitespace-nowrap ${
-                  status === 'active'
+                aria-current={isActive ? 'step' : undefined}
+                className={`relative group flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded transition-all duration-150 text-left whitespace-nowrap ${
+                  isActive
                     ? 'bg-[var(--brand-subtle)] border border-[var(--brand-border)] shadow-xs'
-                    : status === 'completed' || status === 'enabled'
-                    ? 'hover:bg-[var(--surface-hover)] border border-transparent text-[var(--text-secondary)]'
-                    : 'opacity-40 cursor-not-allowed border border-transparent text-[var(--text-muted)]'
+                    : isCompleted || status === 'enabled'
+                    ? 'hover:bg-[var(--surface-hover)] border border-transparent cursor-pointer active:scale-[0.98]'
+                    : 'opacity-40 cursor-not-allowed border border-transparent'
                 }`}
               >
+                {/* Step Indicator Badge: Checkmark if completed, Step number otherwise */}
                 <div
-                  className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold shrink-0 transition ${
-                    status === 'active'
-                      ? 'bg-[var(--brand-primary)] text-white'
-                      : status === 'completed'
-                      ? 'bg-[var(--success-solid)] text-white'
+                  className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors ${
+                    isActive
+                      ? 'bg-[var(--brand-primary)] text-white shadow-xs'
+                      : isCompleted
+                      ? 'bg-[var(--success-subtle)] text-[var(--success-text)] border border-[var(--success-border)]'
                       : status === 'enabled'
                       ? 'bg-[var(--surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-default)]'
-                      : 'bg-[var(--surface-subtle)] text-[var(--text-muted)]'
+                      : 'bg-transparent text-[var(--text-muted)] border border-[var(--border-subtle)]'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  {isCompleted ? (
+                    <Check className="w-3 h-3 stroke-[2.5]" />
+                  ) : (
+                    <span>{step.number}</span>
+                  )}
                 </div>
-                <div>
-                  <div className="text-xs font-semibold leading-tight flex items-center gap-1.5">
-                    <span className={status === 'active' ? 'text-[var(--brand-text)] font-bold' : 'ws-title'}>
-                      {step.number}. {step.label}
-                    </span>
-                    {status === 'completed' && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-solid)] shrink-0"></span>
-                    )}
-                  </div>
-                  <div className="text-[10px] ws-muted leading-tight mt-0.5">
+
+                {/* Primary Stage Label & Secondary Sublabel */}
+                <div className="flex flex-col min-w-0">
+                  <span
+                    className={`text-[11px] tracking-wider font-bold leading-tight uppercase transition-colors ${
+                      isActive
+                        ? 'text-[var(--brand-text)]'
+                        : isCompleted
+                        ? 'text-[var(--text-primary)]'
+                        : status === 'enabled'
+                        ? 'text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]'
+                        : 'text-[var(--text-muted)]'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)] tracking-tight leading-none mt-0.5 hidden lg:inline-block">
                     {step.sublabel}
-                  </div>
+                  </span>
                 </div>
+
+                {/* Active Underline Indicator */}
+                {isActive && (
+                  <span
+                    className="absolute bottom-0 left-2 right-2 h-0.5 bg-[var(--brand-primary)] rounded-full"
+                    aria-hidden="true"
+                  />
+                )}
               </button>
 
+              {/* Connecting Rush Workflow Track */}
               {idx < STEPS.length - 1 && (
-                <ChevronRight className="w-3.5 h-3.5 text-[var(--border-strong)] shrink-0 hidden md:block" />
+                <div
+                  className="flex-1 hidden sm:flex items-center px-1 sm:px-2 min-w-3 max-w-16"
+                  aria-hidden="true"
+                >
+                  <div
+                    className={`h-0.5 w-full rounded-full transition-colors duration-200 ${
+                      isCompleted
+                        ? 'bg-[var(--brand-primary)] opacity-40'
+                        : 'bg-[var(--border-default)] opacity-60'
+                    }`}
+                  />
+                </div>
               )}
             </React.Fragment>
           );
@@ -158,3 +196,4 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
     </nav>
   );
 };
+
