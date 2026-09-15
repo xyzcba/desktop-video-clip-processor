@@ -1,0 +1,8 @@
+0.000 [enter] crop x 0;
+0.000 [enter] crop y 0;
+1.000 [enter] crop x 1434;
+1.000 [enter] crop y 216;
+2.000 [enter] crop x 0;
+2.000 [enter] crop y 216;
+3.000 [enter] crop x 718;
+3.000 [enter] crop y 212;

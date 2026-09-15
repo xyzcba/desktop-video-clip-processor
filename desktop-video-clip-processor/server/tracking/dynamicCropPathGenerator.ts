@@ -79,6 +79,13 @@ export function calculateFixedDynamicCropDimensions(
   const sH = Math.max(2, sourceHeight || 1080);
   const clampedZoom = Math.max(1.0, zoom || DYNAMIC_BASE_ZOOM);
 
+  // Helper to ensure crop dimensions are valid, even, and <= source dimensions
+  const clampDim = (dim: number, maxDim: number) => {
+    const minSafe = Math.min(maxDim, 120);
+    const clamped = Math.min(maxDim, Math.max(minSafe, dim));
+    return Math.min(maxDim, Math.max(2, Math.floor(clamped / 2) * 2));
+  };
+
   if (aspectRatio === '16:9') {
     // 16:9 aspect ratio
     let cropWidth = Math.min(sW, Math.round((sW / clampedZoom) / 2) * 2);
@@ -88,23 +95,27 @@ export function calculateFixedDynamicCropDimensions(
       cropWidth = Math.round((cropHeight * 16 / 9) / 2) * 2;
     }
     return {
-      cropWidth: Math.max(120, Math.min(sW, cropWidth)),
-      cropHeight: Math.max(120, Math.min(sH, cropHeight)),
+      cropWidth: clampDim(cropWidth, sW),
+      cropHeight: clampDim(cropHeight, sH),
     };
   }
 
   if (aspectRatio === '1:1') {
     // 1:1 square
     const minDim = Math.min(sW, sH);
-    const cropDim = Math.max(120, Math.min(minDim, Math.round((minDim / clampedZoom) / 2) * 2));
-    return { cropWidth: cropDim, cropHeight: cropDim };
+    const cropDim = Math.round((minDim / clampedZoom) / 2) * 2;
+    const safeCropDim = clampDim(cropDim, minDim);
+    return { cropWidth: safeCropDim, cropHeight: safeCropDim };
   }
 
   if (aspectRatio === 'original') {
     // Original aspect ratio
-    const cropWidth = Math.max(120, Math.min(sW, Math.round((sW / clampedZoom) / 2) * 2));
-    const cropHeight = Math.max(120, Math.min(sH, Math.round((sH / clampedZoom) / 2) * 2));
-    return { cropWidth, cropHeight };
+    const cropWidth = Math.round((sW / clampedZoom) / 2) * 2;
+    const cropHeight = Math.round((sH / clampedZoom) / 2) * 2;
+    return {
+      cropWidth: clampDim(cropWidth, sW),
+      cropHeight: clampDim(cropHeight, sH),
+    };
   }
 
   // Default: 9:16 vertical crop
@@ -115,9 +126,42 @@ export function calculateFixedDynamicCropDimensions(
     cropHeight = Math.round((cropWidth * 16 / 9) / 2) * 2;
   }
   return {
-    cropWidth: Math.max(120, Math.min(sW, cropWidth)),
-    cropHeight: Math.max(120, Math.min(sH, cropHeight)),
+    cropWidth: clampDim(cropWidth, sW),
+    cropHeight: clampDim(cropHeight, sH),
   };
+}
+
+/**
+ * Defensive boundary clamping for Dynamic Face Tracking camera coordinates.
+ * Strictly guarantees that:
+ * 1. X >= 0
+ * 2. X <= sourceWidth - cropWidth
+ * 3. Y >= 0
+ * 4. Y <= sourceHeight - cropHeight
+ *
+ * Never allows the crop rectangle to extend past left, right, top, or bottom edges.
+ * Prevents invalid negative bounds and maintains safe even-pixel alignment.
+ */
+export function clampFinalCropCoordinate(
+  calculatedCoord: number,
+  sourceDimension: number,
+  cropDimension: number
+): number {
+  const maxBound = Math.max(0, sourceDimension - cropDimension);
+  if (maxBound <= 0 || !Number.isFinite(calculatedCoord)) {
+    return 0;
+  }
+
+  // Align to even pixel boundary for standard video codecs
+  const evenVal = Math.round(calculatedCoord / 2) * 2;
+
+  // Never allow crop rectangle to extend past right or bottom edges
+  if (evenVal > maxBound) {
+    return Math.max(0, Math.floor(maxBound / 2) * 2);
+  }
+
+  // Never allow crop rectangle to extend past left or top edges
+  return Math.max(0, evenVal);
 }
 
 /**
@@ -147,20 +191,32 @@ export function generateDynamicSmoothCropPath(
   const zoom = options?.zoom ?? DYNAMIC_BASE_ZOOM;
 
   // 1. Calculate ONE FIXED crop width and height for the entire clip
-  const { cropWidth, cropHeight } = calculateFixedDynamicCropDimensions(
+  const rawDims = calculateFixedDynamicCropDimensions(
     sourceWidth,
     sourceHeight,
     aspectRatio,
     zoom
   );
 
+  // Defensive check: safely constrain crop dimensions if >= source dimensions
+  // so valid ranges exist without negative bounds.
+  let cropWidth = rawDims.cropWidth;
+  let cropHeight = rawDims.cropHeight;
+
+  if (cropWidth > sourceWidth) {
+    cropWidth = Math.max(2, Math.floor(sourceWidth / 2) * 2);
+  }
+  if (cropHeight > sourceHeight) {
+    cropHeight = Math.max(2, Math.floor(sourceHeight / 2) * 2);
+  }
+
   const maxX = Math.max(0, sourceWidth - cropWidth);
   const maxY = Math.max(0, sourceHeight - cropHeight);
 
   // Fallback: If no trajectory points detected, center safely with the fixed zoom
   if (trajectory.length === 0) {
-    const defaultX = Math.round(maxX / 4) * 2;
-    const defaultY = Math.round(maxY / 4) * 2;
+    const defaultX = clampFinalCropCoordinate(maxX / 2, sourceWidth, cropWidth);
+    const defaultY = clampFinalCropCoordinate(maxY / 2, sourceHeight, cropHeight);
     return {
       keyframes: [{ timestamp: 0, x: defaultX, y: defaultY, width: cropWidth, height: cropHeight }],
       sendcmdFilePath: '',
@@ -178,8 +234,8 @@ export function generateDynamicSmoothCropPath(
       const idealX = facePxX - cropWidth * 0.5;
       const idealY = facePxY - cropHeight * 0.38;
 
-      const clampedX = Math.max(0, Math.min(maxX, Math.round(idealX / 2) * 2));
-      const clampedY = Math.max(0, Math.min(maxY, Math.round(idealY / 2) * 2));
+      const clampedX = clampFinalCropCoordinate(idealX, sourceWidth, cropWidth);
+      const clampedY = clampFinalCropCoordinate(idealY, sourceHeight, cropHeight);
 
       return {
         timestamp: pt.timestamp,
@@ -325,9 +381,12 @@ export function generateDynamicSmoothCropPath(
       }
     }
 
-    // Clamp coordinates strictly inside frame boundaries and align to even pixels
-    const finalX = Math.max(0, Math.min(maxX, Math.round(currentCameraX / 2) * 2));
-    const finalY = Math.max(0, Math.min(maxY, Math.round(currentCameraY / 2) * 2));
+    // Defensive boundary clamping applied to the FINAL crop coordinates
+    // regardless of whether position came from normal interpolation, EMA smoothing,
+    // velocity limiting, acceleration/deceleration, snap movement, speaker switching,
+    // face-loss fallback, or vertical tracking.
+    const finalX = clampFinalCropCoordinate(currentCameraX, sourceWidth, cropWidth);
+    const finalY = clampFinalCropCoordinate(currentCameraY, sourceHeight, cropHeight);
 
     keyframes.push({
       timestamp: t,
@@ -346,13 +405,17 @@ export function generateDynamicSmoothCropPath(
 
   for (let i = 0; i < keyframes.length; i++) {
     const kf = keyframes[i];
+    // Final defensive boundary clamping before emitting to sendcmd
+    const emitX = clampFinalCropCoordinate(kf.x, sourceWidth, cropWidth);
+    const emitY = clampFinalCropCoordinate(kf.y, sourceHeight, cropHeight);
+
     // Always emit the first frame, last frame, or whenever position changes
-    if (i === 0 || i === keyframes.length - 1 || kf.x !== lastEmittedX || kf.y !== lastEmittedY) {
+    if (i === 0 || i === keyframes.length - 1 || emitX !== lastEmittedX || emitY !== lastEmittedY) {
       const timeStr = kf.timestamp.toFixed(3);
-      cmdText += `${timeStr} [enter] crop x ${kf.x};\n`;
-      cmdText += `${timeStr} [enter] crop y ${kf.y};\n`;
-      lastEmittedX = kf.x;
-      lastEmittedY = kf.y;
+      cmdText += `${timeStr} [enter] crop x ${emitX};\n`;
+      cmdText += `${timeStr} [enter] crop y ${emitY};\n`;
+      lastEmittedX = emitX;
+      lastEmittedY = emitY;
     }
   }
 
@@ -366,8 +429,8 @@ export function generateDynamicSmoothCropPath(
 
   // Escape sendcmd path for safe FFmpeg filter graph
   const escapedCmdPath = sendcmdFilePath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
-  const initialX = keyframes[0].x;
-  const initialY = keyframes[0].y;
+  const initialX = clampFinalCropCoordinate(keyframes[0]?.x ?? 0, sourceWidth, cropWidth);
+  const initialY = clampFinalCropCoordinate(keyframes[0]?.y ?? 0, sourceHeight, cropHeight);
 
   // FFmpeg crop filter initialized with constant crop dimensions and initial position
   const cropFilter = `sendcmd=f='${escapedCmdPath}',crop=w=${cropWidth}:h=${cropHeight}:x=${initialX}:y=${initialY}`;
