@@ -153,6 +153,7 @@ export function generateSmoothCropPath(
         timestamp: pt.timestamp,
         targetX: clampedX,
         targetY: clampedY,
+        isReacquisition: !!pt.isReacquisition,
       };
     })
     .sort((a, b) => a.timestamp - b.timestamp);
@@ -208,8 +209,8 @@ export function generateSmoothCropPath(
       // Distance from camera's actual current continuous position
       const distFromCamera = Math.hypot(candX - currentCameraX, candY - currentCameraY);
 
-      if (distFromCamera >= largeMovementThreshold) {
-        // LARGE MOVEMENT: Snap immediately!
+      if (nextWp.isReacquisition || distFromCamera >= largeMovementThreshold) {
+        // REACQUISITION SNAP OR LARGE MOVEMENT: Snap immediately!
         currentCameraX = candX;
         currentCameraY = candY;
         smoothedTargetX = candX;

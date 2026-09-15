@@ -9,6 +9,19 @@ export interface TargetSpeakerTrajectoryPoint {
   trackId: number;
   faceCenter: { x: number; y: number }; // normalized 0..1
   faceSize: { width: number; height: number }; // normalized 0..1
+  isReacquisition?: boolean;
+}
+
+/**
+ * Tolerance for matching a track's detection point to the current face-analysis frame timestamp.
+ * At 2 FPS (~0.5s intervals), a tolerance of 0.35s strictly differentiates detections from
+ * the current frame vs previous/future frames (diff >= 0.5s).
+ */
+const ANALYSIS_FRAME_DETECTION_TOLERANCE_SEC = 0.35;
+
+function isTrackDetectedAt(track: FaceTrack, timestamp: number): boolean {
+  const pt = getClosestPoint(track, timestamp);
+  return pt !== null && Math.abs(pt.timestamp - timestamp) <= ANALYSIS_FRAME_DETECTION_TOLERANCE_SEC;
 }
 
 /**
@@ -42,7 +55,8 @@ export function computeSpeakerTrajectory(
   const sampleStep = 0.5; // 2 FPS
   const totalSteps = Math.ceil(clipDurationSec / sampleStep);
 
-  let currentSpeakerTrackId: number = tracks[0].id;
+  const initialPresentTrack = tracks.find((tr) => isTrackDetectedAt(tr, 0));
+  let currentSpeakerTrackId: number = initialPresentTrack ? initialPresentTrack.id : tracks[0].id;
   let currentCandidateTrackId: number | null = null;
   let candidateSpeakingStartTime: number = 0;
   let lastSpeechDetectedTime: number = 0;
@@ -54,7 +68,77 @@ export function computeSpeakerTrajectory(
       lastSpeechDetectedTime = t;
     }
 
-    // Find all tracks alive at time t
+    // Identify tracks with valid face detections on this analysis frame
+    const validTracksAtT = tracks.filter((tr) => isTrackDetectedAt(tr, t));
+
+    // Check whether the face driving the camera target is still valid on this analysis frame
+    const currentSpeakerTrack = tracks.find((tr) => tr.id === currentSpeakerTrackId);
+    const isCurrentTargetValid = currentSpeakerTrack !== undefined && isTrackDetectedAt(currentSpeakerTrack, t);
+
+    // ========================================================================
+    // CASE B: CURRENT TARGET IS LOST / INVALID
+    // ========================================================================
+    if (!isCurrentTargetValid) {
+      if (validTracksAtT.length > 0) {
+        // 1. Do NOT wait for normal speaker-switch delay (HYSTERESIS_SWITCH_DELAY_SEC)
+        // 2. Do NOT wait for normal stabilization/hold period
+        // 3. Find the best valid replacement face using existing tracking/speaker-selection info
+        let bestReplacementTrack = validTracksAtT[0];
+        if (validTracksAtT.length > 1) {
+          let maxEvidenceScore = -1;
+          for (const track of validTracksAtT) {
+            const pt = getClosestPoint(track, t);
+            const mouthMotion = pt ? pt.mouthMotion : 0;
+            const faceArea = track.averageSize.width * track.averageSize.height;
+            const centerDist = Math.abs(track.smoothedCenter.x - 0.5);
+            const centralityScore = 1.0 - Math.min(1.0, centerDist * 2);
+            const evidenceScore = mouthMotion * (speechActive ? 2.5 : 1.0) + faceArea * 30 + centralityScore * 2;
+            if (evidenceScore > maxEvidenceScore) {
+              maxEvidenceScore = evidenceScore;
+              bestReplacementTrack = track;
+            }
+          }
+        }
+
+        // 4. Immediately reacquire that face and reset switch state
+        currentSpeakerTrackId = bestReplacementTrack.id;
+        currentCandidateTrackId = null;
+        candidateSpeakingStartTime = 0;
+
+        // 5. Immediately snap camera target/crop position (isReacquisition: true)
+        const pt = getClosestPoint(bestReplacementTrack, t);
+        trajectory.push({
+          timestamp: t,
+          trackId: bestReplacementTrack.id,
+          faceCenter: pt
+            ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 }
+            : { ...bestReplacementTrack.smoothedCenter },
+          faceSize: pt
+            ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 }
+            : { ...bestReplacementTrack.averageSize },
+          isReacquisition: true,
+        });
+
+        // 6. Resume normal tracking from this point onward
+        continue;
+      } else {
+        // No faces detected on this analysis frame: hold last known position
+        const fallbackTrack = tracks.find((tr) => tr.id === currentSpeakerTrackId) || tracks[0];
+        const lastPoint = trajectory.length > 0 ? trajectory[trajectory.length - 1] : null;
+        trajectory.push({
+          timestamp: t,
+          trackId: fallbackTrack.id,
+          faceCenter: lastPoint ? { ...lastPoint.faceCenter } : { ...fallbackTrack.smoothedCenter },
+          faceSize: lastPoint ? { ...lastPoint.faceSize } : { ...fallbackTrack.averageSize },
+        });
+        continue;
+      }
+    }
+
+    // ========================================================================
+    // CASE A: CURRENT TARGET IS STILL VALID
+    // Keep existing behavior completely unchanged
+    // ========================================================================
     const aliveTracks = tracks.filter(
       (tr) => t >= tr.firstTimestamp - 0.2 && t <= tr.lastSeenTimestamp + 1.2
     );
@@ -203,7 +287,8 @@ export function computeDynamicSpeakerTrajectory(
     return Math.abs(pt.timestamp - curT) <= FACE_DETECTION_FRESHNESS_SEC;
   };
 
-  let currentSpeakerTrackId: number = sortedTracks[0].id;
+  const initialPresentTrack = sortedTracks.find((tr) => isTrackDetectedAt(tr, 0));
+  let currentSpeakerTrackId: number = initialPresentTrack ? initialPresentTrack.id : sortedTracks[0].id;
   let currentCandidateTrackId: number | null = null;
   let candidateSpeakingStartTime: number = 0;
   let lastSwitchTimestamp: number = -10.0;
@@ -216,6 +301,78 @@ export function computeDynamicSpeakerTrajectory(
       lastSpeechDetectedTime = t;
     }
 
+    // Identify tracks with valid face detections on this analysis frame
+    const validTracksAtT = sortedTracks.filter((tr) => isTrackDetectedAt(tr, t));
+
+    // Check whether the face driving the camera target is still valid on this analysis frame
+    const currentSpeakerTrack = sortedTracks.find((tr) => tr.id === currentSpeakerTrackId);
+    const isCurrentTargetValid = currentSpeakerTrack !== undefined && isTrackDetectedAt(currentSpeakerTrack, t);
+
+    // ========================================================================
+    // CASE B: CURRENT TARGET IS LOST / INVALID
+    // ========================================================================
+    if (!isCurrentTargetValid) {
+      if (validTracksAtT.length > 0) {
+        // 1. Do NOT wait for normal speaker-switch delay (DYNAMIC_SWITCH_DELAY_SEC)
+        // 2. Do NOT wait for normal stabilization window (STABILIZATION_WINDOW_SEC) & pause hold
+        // 3. Find the best valid replacement face using existing dynamic scoring info
+        let bestReplacementTrack = validTracksAtT[0];
+        if (validTracksAtT.length > 1) {
+          let maxEvidenceScore = -1;
+          for (const track of validTracksAtT) {
+            const pt = getClosestPoint(track, t);
+            const mouthMotion = pt ? pt.mouthMotion : 0;
+            const faceArea = track.averageSize.width * track.averageSize.height;
+            const centerDist = Math.abs(track.smoothedCenter.x - 0.5);
+            const centralityScore = 1.0 - Math.min(1.0, centerDist * 1.8);
+            const evidenceScore = mouthMotion * (speechActive ? 2.8 : 1.0) + faceArea * 32 + centralityScore * 2;
+            if (evidenceScore > maxEvidenceScore) {
+              maxEvidenceScore = evidenceScore;
+              bestReplacementTrack = track;
+            }
+          }
+        }
+
+        // 4. Immediately reacquire that face and reset switch/stabilization state
+        currentSpeakerTrackId = bestReplacementTrack.id;
+        currentCandidateTrackId = null;
+        candidateSpeakingStartTime = 0;
+        lastSwitchTimestamp = t;
+
+        // 5. Immediately snap camera target/crop position (isReacquisition: true)
+        const pt = getClosestPoint(bestReplacementTrack, t);
+        trajectory.push({
+          timestamp: t,
+          trackId: bestReplacementTrack.id,
+          faceCenter: pt
+            ? { x: (pt.box.x1 + pt.box.x2) / 2, y: (pt.box.y1 + pt.box.y2) / 2 }
+            : { ...bestReplacementTrack.smoothedCenter },
+          faceSize: pt
+            ? { width: pt.box.x2 - pt.box.x1, height: pt.box.y2 - pt.box.y1 }
+            : { ...bestReplacementTrack.averageSize },
+          isReacquisition: true,
+        });
+
+        // 6. Resume normal tracking from this point onward
+        continue;
+      } else {
+        // No faces detected on this analysis frame: hold last known position
+        const fallbackTrack = sortedTracks.find((tr) => tr.id === currentSpeakerTrackId) || sortedTracks[0];
+        const lastPoint = trajectory.length > 0 ? trajectory[trajectory.length - 1] : null;
+        trajectory.push({
+          timestamp: t,
+          trackId: fallbackTrack.id,
+          faceCenter: lastPoint ? { ...lastPoint.faceCenter } : { ...fallbackTrack.smoothedCenter },
+          faceSize: lastPoint ? { ...lastPoint.faceSize } : { ...fallbackTrack.averageSize },
+        });
+        continue;
+      }
+    }
+
+    // ========================================================================
+    // CASE A: CURRENT TARGET IS STILL VALID
+    // Keep existing dynamic tracking behavior completely unchanged:
+    // ========================================================================
     // Find all tracks alive at time t (with grace window for occlusion and speaker continuity)
     const aliveTracks = sortedTracks.filter(
       (tr) => t >= tr.firstTimestamp - 0.25 && t <= tr.lastSeenTimestamp + 1.5
