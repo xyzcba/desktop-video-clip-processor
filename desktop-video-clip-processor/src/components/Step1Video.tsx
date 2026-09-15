@@ -11,8 +11,6 @@ import {
   ArrowRight,
   Loader2,
   RotateCw,
-  Cpu,
-  FileText,
   FolderOpen,
   Check,
 } from 'lucide-react';
@@ -229,35 +227,36 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
         onChange={handleFolderFileInputChange}
       />
 
-      {/* Title & Stage Banner */}
-      <div className="ws-panel p-5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded bg-[var(--brand-subtle)] text-[var(--brand-text)] flex items-center justify-center shrink-0">
-            <Film className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold ws-title">
-              Stage 1: Video & Output Setup
-            </h2>
-            <p className="text-xs ws-muted mt-0.5">
-              Choose a video file to work with and select the folder where your finished clips will be saved.
-            </p>
-          </div>
+      {/* Stage Header: Creator-oriented headline */}
+      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2 pb-1 border-b border-[var(--border-subtle)]">
+        <div>
+          <h2 className="text-sm sm:text-base font-bold tracking-tight text-[var(--text-primary)] uppercase">
+            What Are We Clipping?
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Drop in a long-form video and ClipRush will take it from there.
+          </p>
         </div>
+        {videoMeta && (
+          <div className="flex items-center gap-1.5 text-xs text-[var(--success-text)] font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-solid)]"></span>
+            <span>Source verified & ready</span>
+          </div>
+        )}
       </div>
 
       {/* Error Banner */}
       {errorMessage && (
-        <div id="video-error-banner" className="ws-alert-error p-3.5 flex items-start gap-3 shadow-xs">
+        <div id="video-error-banner" className="ws-alert-error p-3.5 flex items-start gap-3 rounded-lg shadow-xs animate-in fade-in duration-200">
           <AlertCircle className="w-4 h-4 text-[var(--error-solid)] shrink-0 mt-0.5" />
           <div className="text-xs">
-            <div className="font-semibold">Unable to process video:</div>
-            <div>{errorMessage}</div>
+            <div className="font-semibold text-[var(--error-text)]">Unable to inspect video:</div>
+            <div className="text-[var(--text-secondary)] mt-0.5">{errorMessage}</div>
           </div>
         </div>
       )}
 
-      {/* Input Selection Zone (When no video is loaded) */}
+      {/* Empty State / Upload Zone (When no video is loaded) */}
       {!videoMeta && (
         <div className="space-y-4">
           <div
@@ -266,49 +265,69 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition flex flex-col items-center justify-center min-h-[220px] ${
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            className={`group border-2 border-dashed rounded-xl p-12 sm:p-16 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center min-h-[260px] select-none ${
               isDragging
-                ? 'border-[var(--brand-primary)] bg-[var(--brand-subtle)]'
-                : 'border-[var(--border-strong)] hover:border-[var(--brand-primary)] ws-panel'
+                ? 'border-[var(--brand-primary)] bg-[var(--brand-subtle)] ring-2 ring-[var(--brand-primary)]/20 scale-[1.005]'
+                : 'border-[var(--border-strong)] hover:border-[var(--brand-primary)] hover:bg-[var(--surface-hover)] bg-[var(--surface-primary)]'
             }`}
           >
             {isLoading ? (
-              <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-col items-center gap-3 py-6">
                 <Loader2 className="w-8 h-8 text-[var(--brand-primary)] animate-spin" />
-                <div className="text-sm font-semibold ws-title">Inspecting video with local FFprobe...</div>
-                <div className="text-xs ws-muted">Extracting stream metadata and audio channels</div>
+                <div className="text-sm font-semibold text-[var(--text-primary)]">
+                  Checking your video...
+                </div>
+                <div className="text-xs text-[var(--text-muted)] font-mono">
+                  Inspecting streams and audio channels with local FFprobe
+                </div>
               </div>
             ) : (
               <>
-                <div className="w-12 h-12 rounded-full bg-[var(--brand-subtle)] flex items-center justify-center text-[var(--brand-primary)] mb-3 shadow-xs">
-                  <Upload className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-xl bg-[var(--surface-subtle)] group-hover:bg-[var(--brand-subtle)] border border-[var(--border-default)] group-hover:border-[var(--brand-border)] flex items-center justify-center text-[var(--text-secondary)] group-hover:text-[var(--brand-primary)] mb-3.5 transition-all duration-150 shadow-xs">
+                  <Upload className="w-5 h-5 transition-transform duration-150 group-hover:-translate-y-0.5" />
                 </div>
-                <div className="text-sm font-semibold ws-title">
-                  Drag and drop your video here, or <span className="text-[var(--brand-text)] underline font-bold">Browse</span>
+                <div className="text-sm sm:text-base font-semibold text-[var(--text-primary)]">
+                  Drag and drop your video here, or{' '}
+                  <span className="text-[var(--brand-primary)] underline font-bold decoration-2 underline-offset-2">
+                    Browse
+                  </span>
                 </div>
-                <p className="text-xs ws-muted mt-1.5 max-w-md">
-                  Supports MP4, MOV, MKV, WEBM, AVI, and all formats decoded by local FFmpeg. Audio-only files are rejected.
+                <p className="text-xs text-[var(--text-muted)] mt-1.5 max-w-md leading-relaxed">
+                  Supports MP4, MOV, MKV, WEBM, AVI, and all standard formats decoded by local FFmpeg. Audio-only files are rejected.
                 </p>
+                <div className="mt-4 inline-flex items-center gap-2 text-[11px] text-[var(--text-muted)] font-medium px-2.5 py-1 rounded-full bg-[var(--surface-subtle)] border border-[var(--border-subtle)]">
+                  <span>100% on-device processing</span>
+                  <span>•</span>
+                  <span>Zero cloud uploads</span>
+                </div>
               </>
             )}
           </div>
         </div>
       )}
 
-      {/* Loaded Video Source & Technical Specifications (When video is loaded) */}
+      {/* Loaded Video State (Recognize & Confirm) */}
       {videoMeta && (
-        <div id="video-metadata-card" className="ws-panel overflow-hidden">
-          {/* Header row */}
-          <div className="p-4 border-b border-[var(--border-default)] flex items-center justify-between gap-4">
+        <div id="video-metadata-card" className="ws-panel p-4 sm:p-5 space-y-4 rounded-xl">
+          {/* Header row: Ready badge, filename, and Change Video */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border-default)]">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded bg-[var(--success-subtle)] text-[var(--success-text)] border border-[var(--success-border)] flex items-center justify-center shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-[var(--success-subtle)] text-[var(--success-text)] border border-[var(--success-border)] flex items-center justify-center shrink-0">
                 <CheckCircle2 className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--success-text)]">
-                  Loaded Source Video
+                  VIDEO READY
                 </div>
-                <div className="text-sm font-bold ws-title truncate max-w-md">
+                <div className="text-sm sm:text-base font-bold text-[var(--text-primary)] truncate max-w-md sm:max-w-xl" title={videoMeta.filename}>
                   {videoMeta.filename}
                 </div>
               </div>
@@ -320,18 +339,19 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
               type="button"
               onClick={handleChangeVideo}
               disabled={isLoading}
-              className="ws-btn-secondary shrink-0"
+              className="ws-btn-secondary shrink-0 text-xs gap-1.5"
               title="Select another video to replace this source"
             >
-              <RotateCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <RotateCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
               <span>Change Video</span>
             </button>
           </div>
 
-          <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Media Preview Player */}
-            <div className="md:col-span-1 flex flex-col justify-center">
-              <div className="rounded overflow-hidden bg-black aspect-video border border-[var(--border-default)] relative shadow-inner flex items-center justify-center">
+          {/* Media Player and Technical Metadata Two-Column Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* Left: Source Video Workspace Preview (7 Cols) */}
+            <div className="lg:col-span-7 flex flex-col space-y-1.5">
+              <div className="rounded-lg overflow-hidden bg-black aspect-video border border-[var(--border-default)] relative shadow-inner flex items-center justify-center">
                 {session?.sessionId ? (
                   <video
                     id="video-preview-player"
@@ -345,58 +365,73 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
                   </div>
                 )}
               </div>
-              <div className="text-[11px] text-center ws-muted mt-1.5">
-                Source Video Preview
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] px-1">
+                <span>Source Video Preview</span>
+                <span className="font-mono text-[10px]">{videoMeta.width}×{videoMeta.height} ({videoMeta.aspectRatio})</span>
               </div>
             </div>
 
-            {/* Technical Specifications Grid */}
-            <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="ws-well p-3">
-                <div className="text-[11px] ws-muted font-medium flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-[var(--brand-primary)]" /> Duration
+            {/* Right: Primary Metrics + Technical Specifications (5 Cols) */}
+            <div className="lg:col-span-5 flex flex-col space-y-3">
+              {/* Primary Creator Metrics: Duration & Resolution */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="ws-well p-3 rounded-lg">
+                  <div className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
+                    <span>Duration</span>
+                  </div>
+                  <div className="text-base sm:text-lg font-bold text-[var(--text-primary)] mt-1 tracking-tight">
+                    {videoMeta.formattedDuration}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                    {formatDurationHuman(videoMeta.durationSec)}
+                  </div>
                 </div>
-                <div className="text-sm font-bold ws-title mt-0.5">{videoMeta.formattedDuration}</div>
-                <div className="text-[10px] ws-muted">{formatDurationHuman(videoMeta.durationSec)}</div>
-              </div>
 
-              <div className="ws-well p-3">
-                <div className="text-[11px] ws-muted font-medium flex items-center gap-1">
-                  <Film className="w-3 h-3 text-[var(--brand-primary)]" /> Resolution
-                </div>
-                <div className="text-sm font-bold ws-title mt-0.5">{videoMeta.width} × {videoMeta.height}</div>
-                <div className="text-[10px] ws-muted">{videoMeta.aspectRatio} @ {videoMeta.fps} fps</div>
-              </div>
-
-              <div className="ws-well p-3">
-                <div className="text-[11px] ws-muted font-medium flex items-center gap-1">
-                  <HardDrive className="w-3 h-3 text-[var(--brand-primary)]" /> File Size
-                </div>
-                <div className="text-sm font-bold ws-title mt-0.5">{videoMeta.formattedSize}</div>
-                <div className="text-[10px] ws-muted truncate">{videoMeta.formatName.split(',')[0]}</div>
-              </div>
-
-              <div className="ws-well p-3">
-                <div className="text-[11px] ws-muted font-medium">Video Codec</div>
-                <div className="text-xs font-semibold ws-title mt-0.5 truncate" title={videoMeta.videoCodec}>
-                  {videoMeta.videoCodec}
+                <div className="ws-well p-3 rounded-lg">
+                  <div className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1.5">
+                    <Film className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
+                    <span>Resolution</span>
+                  </div>
+                  <div className="text-base sm:text-lg font-bold text-[var(--text-primary)] mt-1 tracking-tight">
+                    {videoMeta.width} × {videoMeta.height}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                    {videoMeta.aspectRatio} @ {videoMeta.fps} fps
+                  </div>
                 </div>
               </div>
 
-              <div className="ws-well p-3">
-                <div className="text-[11px] ws-muted font-medium">Audio Track</div>
-                <div className="text-xs font-semibold ws-title mt-0.5 truncate">
-                  {videoMeta.audioCodec || 'None'}
+              {/* Secondary Technical Specifications (Compact Rows) */}
+              <div className="ws-well p-3 rounded-lg space-y-2 text-xs">
+                <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]">
+                  <span className="text-[var(--text-muted)] text-[11px] font-medium flex items-center gap-1">
+                    <HardDrive className="w-3 h-3 text-[var(--text-muted)]" /> File Size
+                  </span>
+                  <span className="font-mono text-[11px] font-medium text-[var(--text-primary)]">
+                    {videoMeta.formattedSize}
+                  </span>
                 </div>
-                {videoMeta.audioSampleRate && (
-                  <div className="text-[10px] ws-muted">{videoMeta.audioSampleRate} Hz</div>
-                )}
-              </div>
 
-              <div className="ws-well p-3">
-                <div className="text-[11px] ws-muted font-medium">Local Path</div>
-                <div className="text-xs font-mono ws-muted mt-0.5 truncate" title={videoMeta.originalPath}>
-                  {videoMeta.originalPath || 'Uploaded Video'}
+                <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]">
+                  <span className="text-[var(--text-muted)] text-[11px] font-medium">Video Codec</span>
+                  <span className="font-mono text-[11px] text-[var(--text-secondary)] truncate max-w-[170px]" title={`${videoMeta.formatName} / ${videoMeta.videoCodec}`}>
+                    {videoMeta.videoCodec} <span className="text-[var(--text-muted)]">({videoMeta.formatName.split(',')[0]})</span>
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1 border-b border-[var(--border-subtle)]">
+                  <span className="text-[var(--text-muted)] text-[11px] font-medium">Audio Track</span>
+                  <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+                    {videoMeta.audioCodec || 'None'} {videoMeta.audioSampleRate ? `@ ${videoMeta.audioSampleRate} Hz` : ''}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-[var(--text-muted)] text-[11px] font-medium">Source Path</span>
+                  <span className="font-mono text-[10px] text-[var(--text-muted)] truncate max-w-[170px]" title={videoMeta.originalPath}>
+                    {videoMeta.originalPath || 'Uploaded File'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -404,181 +439,111 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
         </div>
       )}
 
-      {/* Target Output Folder Configuration Section */}
-      <div id="target-output-folder-card" className="ws-panel p-5 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded bg-[var(--brand-subtle)] text-[var(--brand-text)] flex items-center justify-center shrink-0">
-              <Folder className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold ws-title">Target Output Folder</h3>
-              <p className="text-xs ws-muted">
-                Specify where completed 9:16 vertical video clips will be saved on your computer.
-              </p>
-            </div>
+      {/* Target Output Folder Confirmation */}
+      <div id="target-output-folder-card" className="ws-well p-3.5 sm:p-4 rounded-xl border border-[var(--border-default)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-[var(--surface-primary)] text-[var(--brand-primary)] border border-[var(--border-default)] flex items-center justify-center shrink-0 shadow-2xs">
+            <Folder className="w-4 h-4" />
           </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                OUTPUT DESTINATION
+              </span>
+              {folderSavedNotice && (
+                <span className="text-[10px] text-[var(--success-text)] font-semibold flex items-center gap-1 animate-in fade-in">
+                  <Check className="w-2.5 h-2.5" /> Saved
+                </span>
+              )}
+            </div>
+            {!isEditingFolder ? (
+              <div
+                className="font-mono text-xs text-[var(--text-primary)] font-medium truncate select-all mt-0.5"
+                title={currentOutputDir || session?.outputDir || ''}
+              >
+                {currentOutputDir || session?.outputDir || 'Resolving default downloads folder...'}
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSaveOutputDir(currentOutputDir);
+                }}
+                className="flex items-center gap-2 mt-1"
+              >
+                <input
+                  id="input-manual-output-folder"
+                  type="text"
+                  value={currentOutputDir}
+                  onChange={(e) => setCurrentOutputDir(e.target.value)}
+                  placeholder="C:\Users\username\Downloads\ViralClips"
+                  className="ws-input font-mono text-xs py-1 px-2.5 h-7 w-64 sm:w-80"
+                  autoFocus
+                />
+                <button
+                  id="btn-save-manual-output-folder"
+                  type="submit"
+                  className="ws-btn-primary text-xs py-1 px-3 h-7"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentOutputDir(session?.outputDir || '');
+                    setIsEditingFolder(false);
+                  }}
+                  className="ws-btn-secondary text-xs py-1 px-2.5 h-7"
+                >
+                  Cancel
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-center">
+        {!isEditingFolder && (
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
             <button
               id="btn-browse-output-folder"
               type="button"
               onClick={handleBrowseNativeFolder}
-              className="ws-btn-secondary"
+              className="ws-btn-secondary text-xs py-1 px-2.5"
               title="Open folder selection dialog"
             >
-              <FolderOpen className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
-              <span>Browse Folder...</span>
-            </button>
-
-            {!isEditingFolder ? (
-              <button
-                id="btn-toggle-edit-output-path"
-                type="button"
-                onClick={() => setIsEditingFolder(true)}
-                className="ws-btn-secondary"
-              >
-                Edit Path
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Path Display or Editable Input */}
-        {!isEditingFolder ? (
-          <div className="p-2.5 ws-well flex items-center justify-between gap-3">
-            <div className="font-mono text-xs text-[var(--brand-text)] font-semibold truncate select-all" title={currentOutputDir || session?.outputDir || ''}>
-              {currentOutputDir || session?.outputDir || 'Resolving default downloads folder...'}
-            </div>
-            {folderSavedNotice && (
-              <span className="text-[11px] text-[var(--success-text)] font-medium flex items-center gap-1 shrink-0 animate-in fade-in">
-                <Check className="w-3 h-3" /> Saved
-              </span>
-            )}
-          </div>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSaveOutputDir(currentOutputDir);
-            }}
-            className="flex items-center gap-2"
-          >
-            <input
-              id="input-manual-output-folder"
-              type="text"
-              value={currentOutputDir}
-              onChange={(e) => setCurrentOutputDir(e.target.value)}
-              placeholder="C:\Users\username\Downloads\ViralClips"
-              className="flex-1 ws-input font-mono text-xs"
-            />
-            <button
-              id="btn-save-manual-output-folder"
-              type="submit"
-              className="ws-btn-primary"
-            >
-              Save Path
+              <FolderOpen className="w-3 h-3 text-[var(--brand-primary)]" />
+              <span>Browse...</span>
             </button>
             <button
+              id="btn-toggle-edit-output-path"
               type="button"
-              onClick={() => {
-                setCurrentOutputDir(session?.outputDir || '');
-                setIsEditingFolder(false);
-              }}
-              className="ws-btn-secondary"
+              onClick={() => setIsEditingFolder(true)}
+              className="ws-btn-secondary text-xs py-1 px-2"
+              title="Manually edit destination path"
             >
-              Cancel
+              Edit
             </button>
-          </form>
+          </div>
         )}
-
-        <div className="text-[11px] ws-muted flex items-center gap-1.5">
-          <span>Clips generated in Stage 4 will be saved directly into this directory.</span>
-        </div>
       </div>
 
-      {/* Informative Audio & Transcription Details Panel */}
-      <div id="transcription-config-section" className="ws-panel p-5 space-y-4">
-        <div>
-          <h3 className="text-sm font-bold ws-title flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-[var(--brand-primary)]" />
-            <span>Audio & Transcription Setup</span>
-          </h3>
-          <p className="text-xs ws-muted mt-0.5">
-            How audio extraction and local Whisper speech recognition will run on this video.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Card A: Audio Preparation */}
-          <div className="ws-section p-4 flex flex-col justify-between space-y-2">
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold ws-title">Audio Extraction</span>
-                <span className="ws-badge-success">
-                  Lossless Track
-                </span>
-              </div>
-              <p className="text-xs ws-muted mt-2 leading-relaxed">
-                The sound track is extracted from your video into a clean audio file for accurate speech recognition.
-              </p>
-            </div>
-            <div className="pt-2 border-t border-[var(--border-default)] text-[11px] text-[var(--success-text)] font-medium">
-              Full-length audio • Synchronized timing
-            </div>
-          </div>
-
-          {/* Card B: Speech Recognition Engine */}
-          <div className="ws-section p-4 flex flex-col justify-between space-y-2">
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold ws-title">Speech Recognition</span>
-                <span className="ws-badge-brand">
-                  Local Whisper
-                </span>
-              </div>
-              <p className="text-xs ws-muted mt-2 leading-relaxed">
-                Speech recognition runs 100% on your device using local Whisper. Your files and transcripts never leave your computer.
-              </p>
-            </div>
-            <div className="pt-2 border-t border-[var(--border-default)] text-[11px] text-[var(--brand-text)] font-medium">
-              100% Private • Works Offline
-            </div>
-          </div>
-
-          {/* Card C: Subtitles */}
-          <div className="ws-section p-4 flex flex-col justify-between space-y-2">
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold ws-title">Subtitle SubRip (SRT)</span>
-                <span className="ws-badge-neutral">
-                  Standard SRT
-                </span>
-              </div>
-              <p className="text-xs ws-muted mt-2 leading-relaxed">
-                Creates subtitle segments with exact start and end times to accurately cut viral highlights.
-              </p>
-            </div>
-            <div className="pt-2 border-t border-[var(--border-default)] text-[11px] text-[var(--brand-text)] font-medium flex items-center gap-1">
-              <FileText className="w-3 h-3" />
-              <span>Accurate highlight cutting</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Primary Action Button (when video is loaded) */}
+      {/* Primary Action Button: Start Transcription (Progressive Reveal when video is loaded) */}
       {videoMeta && (
-        <div className="flex justify-end pt-1">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          <div className="text-xs text-[var(--text-muted)] flex items-center gap-1.5 self-start sm:self-center">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-solid)]"></span>
+            <span>Local Whisper will extract audio and transcribe dialogue offline</span>
+          </div>
+
           <button
             id="btn-start-transcription"
             type="button"
             onClick={() => onStartTranscription()}
             disabled={isLoading || !videoMeta}
-            className="ws-btn-primary py-2.5 px-5 text-sm"
+            className="ws-btn-primary group py-2.5 px-6 text-sm font-semibold tracking-wide shadow-sm hover:shadow active:scale-[0.98] transition-all duration-150 self-end sm:self-auto cursor-pointer"
           >
-            <span>Start Transcription</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>START TRANSCRIPTION</span>
+            <ArrowRight className="w-4 h-4 transition-transform duration-150 group-hover:translate-x-1" />
           </button>
         </div>
       )}

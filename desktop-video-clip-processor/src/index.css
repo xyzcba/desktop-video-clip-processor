@@ -26,6 +26,23 @@
   animation: indeterminate-slide 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+/* Acoustic waveform indicator animation for active listening/transcription */
+@keyframes acoustic-bar-pulse {
+  0%, 100% {
+    transform: scaleY(0.22);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.animate-acoustic-bar {
+  animation: acoustic-bar-pulse 1.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
 /* ==========================================================================
    THEME 1: SEMI-DARK (Default Workstation Theme)
    Comfortable, unified dark palette — calm, consistent surfaces without clutter
