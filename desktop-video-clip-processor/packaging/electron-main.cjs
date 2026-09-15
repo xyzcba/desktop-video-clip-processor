@@ -6,7 +6,7 @@
  * models/Xenova/whisper-tiny.en), and creates a native Windows desktop window.
  */
 
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker } = require('electron');
 const path = require('path');
 const http = require('http');
 const net = require('net');
@@ -14,6 +14,7 @@ const fs = require('fs');
 
 let mainWindow = null;
 let activePort = 3000;
+let serverModule = null;
 
 // Handle native folder picker from renderer
 ipcMain.handle('select-folder', async () => {
@@ -139,6 +140,14 @@ function createWindow(port) {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Release any lingering powerSaveBlockers when window is closed/destroyed
+    if (serverModule && typeof serverModule.releaseAllSleepBlockers === 'function') {
+      try {
+        serverModule.releaseAllSleepBlockers();
+      } catch (err) {
+        console.warn('Error releasing sleep blockers on window close:', err);
+      }
+    }
   });
 }
 
@@ -205,7 +214,10 @@ if (!gotTheLock) {
       // 3. Launch the server module in-process
       const serverFile = resolveServerPath();
       console.log(`Starting media server from: ${serverFile} on port ${activePort}`);
-      require(serverFile);
+      serverModule = require(serverFile);
+      if (serverModule && typeof serverModule.registerPowerSaveBlocker === 'function') {
+        serverModule.registerPowerSaveBlocker(powerSaveBlocker);
+      }
 
       // 4. Wait for server /api/health to confirm readiness
       await waitForServerReady(activePort, 60, 200);
@@ -236,6 +248,24 @@ if (!gotTheLock) {
   });
 
   app.on('before-quit', () => {
-    // Clean exit
+    // Release any lingering power save blockers before the application quits
+    if (serverModule && typeof serverModule.releaseAllSleepBlockers === 'function') {
+      try {
+        serverModule.releaseAllSleepBlockers();
+      } catch (err) {
+        console.warn('Error releasing sleep blockers on before-quit:', err);
+      }
+    }
+  });
+
+  app.on('will-quit', () => {
+    // Final safety release
+    if (serverModule && typeof serverModule.releaseAllSleepBlockers === 'function') {
+      try {
+        serverModule.releaseAllSleepBlockers();
+      } catch {
+        // ignore
+      }
+    }
   });
 }

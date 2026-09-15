@@ -31,6 +31,10 @@ import { DEFAULT_FRAMING_CONFIG, FramingConfig } from '../src/framing/framingTyp
 import { generateAssSubtitleFile } from './captionAssGenerator';
 import { sanitizeCaptionConfig } from '../src/caption/captionValidation';
 import { executeFaceTrackingPipeline } from './tracking/trackingPipeline';
+import {
+  acquireTranscriptionSleepBlocker,
+  releaseTranscriptionSleepBlocker,
+} from './powerManagementService';
 
 // Default Windows Downloads directory resolver
 export function resolveDefaultDownloadsDir(): string {
@@ -213,6 +217,10 @@ export async function startTranscription(
     message: 'Extracting 16 kHz mono PCM audio with local FFmpeg...',
   };
 
+  // Prevent Windows from sleeping/suspending while transcription runs
+  // Acquire a unique per-job lease token to protect against race conditions on retry/re-run
+  const leaseToken = acquireTranscriptionSleepBlocker(sessionId);
+
   // Run in background
   (async () => {
     let timer: NodeJS.Timeout | null = null;
@@ -308,6 +316,7 @@ export async function startTranscription(
       };
     } finally {
       session.isTranscribing = false;
+      releaseTranscriptionSleepBlocker(leaseToken);
     }
   })();
 }
@@ -340,6 +349,7 @@ export function cancelTranscription(sessionId: string): void {
       message: 'Transcription cancelled.',
     };
   }
+  releaseTranscriptionSleepBlocker(sessionId);
 }
 
 /**

@@ -29,6 +29,13 @@ import {
 import { getWorkstationTempDir, validateAllResources } from './server/resourcePaths';
 import { validateViralClipsJson } from './src/utils/jsonValidator';
 import { preloadWhisperModel } from './server/whisperService';
+import {
+  isSleepBlockerActive,
+  releaseAllSleepBlockers,
+  registerPowerSaveBlocker,
+  acquireTranscriptionSleepBlocker,
+  releaseTranscriptionSleepBlocker,
+} from './server/powerManagementService';
 
 const app = express();
 const PORT = 3000;
@@ -119,6 +126,7 @@ app.get('/api/system/status', async (req, res) => {
       whisperEngine: 'local-onnx-cpu',
       localProcessingOnly: true,
       resourceValidation,
+      sleepBlockerActive: isSleepBlockerActive(),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -602,4 +610,23 @@ async function startServer() {
   });
 }
 
+// Ensure power save blockers are completely released on process termination
+process.on('exit', () => {
+  releaseAllSleepBlockers();
+});
+process.on('SIGINT', () => {
+  releaseAllSleepBlockers();
+});
+process.on('SIGTERM', () => {
+  releaseAllSleepBlockers();
+});
+
 startServer();
+
+export {
+  registerPowerSaveBlocker,
+  releaseAllSleepBlockers,
+  acquireTranscriptionSleepBlocker,
+  releaseTranscriptionSleepBlocker,
+  isSleepBlockerActive,
+};
