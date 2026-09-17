@@ -16,7 +16,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { ProjectSession } from '../types';
-import { formatDurationHuman } from '../utils/timestamps';
+import { formatDurationHuman, formatDisplayTimestamp } from '../utils/timestamps';
 
 interface Step2AudioWhisperProps {
   session: ProjectSession;
@@ -90,16 +90,6 @@ export const Step2AudioWhisper: React.FC<Step2AudioWhisperProps> = ({
     }
   };
 
-  // Format SRT timestamp with milliseconds (00:00:00,000)
-  const formatSrtTime = (sec: number) => {
-    const ms = Math.round((sec % 1) * 1000);
-    const totalSec = Math.floor(sec);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
-  };
-
   // Acoustic waveform heights for the central listening visualization
   const waveHeights = [16, 26, 42, 58, 72, 48, 64, 80, 68, 52, 70, 44, 32, 50, 28, 18];
 
@@ -151,10 +141,15 @@ export const Step2AudioWhisper: React.FC<Step2AudioWhisperProps> = ({
         </div>
 
         {isCompleted ? (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--success-text)] font-semibold self-start sm:self-auto">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Ready for AI Highlights</span>
-          </div>
+          <button
+            id="btn-proceed-viral-json"
+            type="button"
+            onClick={onProceedToViralJson}
+            className="ws-btn-primary group py-2 px-5 text-xs font-semibold tracking-wide shadow-xs hover:shadow active:scale-[0.98] transition-all duration-150 cursor-pointer self-start sm:self-auto"
+          >
+            <span>CONTINUE TO AI HIGHLIGHTS</span>
+            <ArrowRight className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-1" />
+          </button>
         ) : isTranscribing ? (
           <div className="flex items-center gap-2 text-xs text-[var(--brand-text)] font-semibold self-start sm:self-auto">
             <span className="relative flex h-2 w-2">
@@ -460,7 +455,7 @@ export const Step2AudioWhisper: React.FC<Step2AudioWhisperProps> = ({
                                 title="Click to seek video to this segment"
                               >
                                 <Play className="w-2.5 h-2.5" />
-                                <span>{formatSrtTime(item.globalStartSec)}</span>
+                                <span>{formatDisplayTimestamp(item.globalStartSec)}</span>
                               </button>
                             </div>
                             <p className="text-[var(--text-primary)] leading-relaxed pt-0.5">
@@ -476,21 +471,10 @@ export const Step2AudioWhisper: React.FC<Step2AudioWhisperProps> = ({
             </div>
           </div>
 
-          {/* Bottom Action Footer */}
-          <div className="p-3.5 border-t border-[var(--border-default)] bg-[var(--surface-primary)] flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-xs text-[var(--text-muted)] flex items-center gap-1.5 self-start sm:self-center">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-solid)]"></span>
-              <span>All speech segments timestamped and ready for AI viral highlight curation</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={onProceedToViralJson}
-              className="ws-btn-primary group py-2 px-5 text-xs font-semibold tracking-wide shadow-xs hover:shadow active:scale-[0.98] transition-all duration-150 cursor-pointer self-end sm:self-auto"
-            >
-              <span>CONTINUE TO AI HIGHLIGHTS</span>
-              <ArrowRight className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-1" />
-            </button>
+          {/* Bottom Status Info Strip */}
+          <div className="p-3 border-t border-[var(--border-default)] bg-[var(--surface-primary)] flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-solid)]"></span>
+            <span>All speech segments timestamped and ready for AI viral highlight curation</span>
           </div>
         </div>
       )}

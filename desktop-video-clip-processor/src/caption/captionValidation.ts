@@ -1,6 +1,50 @@
 import { CaptionConfig, CaptionPosition, WordTimestamp } from './captionTypes';
 
 /**
+ * Centralized temporary unwanted-character replacement list.
+ * Only characters explicitly listed here are removed/replaced before caption rendering.
+ * Deterministic and easily modifiable for future passes.
+ */
+export const TEMPORARY_UNWANTED_CAPTION_CHARACTERS: { char: string; replaceWith: string }[] = [
+  // Music notes & sound effect cues from speech recognition
+  { char: '♪', replaceWith: '' },
+  { char: '♫', replaceWith: '' },
+  // Unicode replacement / corrupt encoding characters
+  { char: '\uFFFD', replaceWith: '' },
+  // Zero-width & invisible formatting characters
+  { char: '\u200B', replaceWith: '' }, // Zero-width space
+  { char: '\u200C', replaceWith: '' }, // Zero-width non-joiner
+  { char: '\u200D', replaceWith: '' }, // Zero-width joiner
+  { char: '\uFEFF', replaceWith: '' }, // Zero-width no-break space / BOM
+  { char: '\u00AD', replaceWith: '' }, // Soft hyphen
+  { char: '\u200E', replaceWith: '' }, // Left-to-right mark
+  { char: '\u200F', replaceWith: '' }, // Right-to-left mark
+  // Stray typographical artifacts
+  { char: '•', replaceWith: '' }, // Bullet
+  { char: '·', replaceWith: '' }, // Middle dot
+  { char: '`', replaceWith: '' }, // Backtick
+  { char: '~', replaceWith: '' }, // Tilde
+  { char: '|', replaceWith: '' }, // Pipe
+  { char: '[BLANK_AUDIO]', replaceWith: '' }, // Whisper blank audio marker
+];
+
+/**
+ * Applies the explicit unwanted-character replacement list to caption text.
+ * Deterministic: only removes characters explicitly included in the unwanted list,
+ * preserving normal readable words, contractions, and punctuation.
+ */
+export function sanitizeCaptionText(text: string): string {
+  if (!text) return '';
+  let result = text;
+  for (const item of TEMPORARY_UNWANTED_CAPTION_CHARACTERS) {
+    if (result.includes(item.char)) {
+      result = result.split(item.char).join(item.replaceWith);
+    }
+  }
+  return result.trim();
+}
+
+/**
  * Validates and sanitizes caption position.
  * Allows positions partially or completely outside the visible canvas [-1.0, 2.0]
  * while safeguarding against NaN or non-numeric corruptions.
@@ -16,14 +60,15 @@ export function clampCaptionPosition(pos: CaptionPosition): CaptionPosition {
 
 /**
  * Validates and sanitizes a sequence of WordTimestamps.
- * Ensures start is non-negative and end is strictly greater than start.
+ * Ensures start is non-negative, end is strictly greater than start,
+ * and applies the explicit unwanted-character filter to the word text before rendering.
  */
 export function sanitizeWordTimestamps(rawWords: WordTimestamp[]): WordTimestamp[] {
   if (!Array.isArray(rawWords)) return [];
 
   return rawWords
     .map((w) => {
-      const cleanWord = (w.word || '').trim();
+      const cleanWord = sanitizeCaptionText(w.word || '');
       let start = Math.max(0, isNaN(w.start) ? 0 : w.start);
       let end = Math.max(start + 0.05, isNaN(w.end) ? start + 0.3 : w.end);
       return {

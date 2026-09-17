@@ -225,20 +225,33 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
         onChange={handleFolderFileInputChange}
       />
 
-      {/* Stage Header: Creator-oriented headline */}
-      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2 pb-1 border-b border-[var(--border-subtle)]">
+      {/* Stage Header: Creator-oriented headline & Primary CTA */}
+      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-3 pb-2 border-b border-[var(--border-subtle)]">
         <div>
           <h2 className="text-sm sm:text-base font-bold tracking-tight text-[var(--text-primary)] uppercase">
-            What Are We Clipping?
+            {videoMeta ? 'SOURCE VIDEO READY' : 'WHAT ARE WE CLIPPING?'}
           </h2>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            Drop in a long-form video and ClipRush will take it from there.
+            {videoMeta
+              ? 'Video inspected and verified. Ready for Whisper speech recognition.'
+              : 'Drop in a long-form video and ClipRush will take it from there.'}
           </p>
         </div>
-        {videoMeta && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--success-text)] font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-solid)]"></span>
-            <span>Source verified & ready</span>
+
+        {videoMeta ? (
+          <button
+            id="btn-start-transcription"
+            type="button"
+            onClick={() => onStartTranscription()}
+            disabled={isLoading || !videoMeta}
+            className="ws-btn-primary group py-2 px-5 text-xs font-semibold tracking-wide shadow-xs hover:shadow active:scale-[0.98] transition-all duration-150 cursor-pointer self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span>START TRANSCRIPTION</span>
+            <ArrowRight className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-1" />
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-mono self-start sm:self-auto">
+            <span>No video selected</span>
           </div>
         )}
       </div>
@@ -476,22 +489,6 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Primary Action Button: Start Transcription (Progressive Reveal when video is loaded) */}
-      {videoMeta && (
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
-          <button
-            id="btn-start-transcription"
-            type="button"
-            onClick={() => onStartTranscription()}
-            disabled={isLoading || !videoMeta}
-            className="ws-btn-primary group py-2.5 px-6 text-xs font-semibold tracking-wide shadow-sm hover:shadow active:scale-[0.98] transition-all duration-150 self-end sm:self-auto cursor-pointer"
-          >
-            <span>START TRANSCRIPTION</span>
-            <ArrowRight className="w-4 h-4 transition-transform duration-150 group-hover:translate-x-1" />
-          </button>
-        </div>
-      )}
     </div>
   );
 };

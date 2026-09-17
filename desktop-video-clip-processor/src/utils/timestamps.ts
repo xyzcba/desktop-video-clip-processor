@@ -146,6 +146,28 @@ export function formatSecondsToTimestamp(totalSec: number, includeMs: boolean = 
 }
 
 /**
+ * Formats seconds into a compact human-readable display timestamp:
+ * - "00:00"
+ * - "01:24"
+ * - "12:37"
+ * - "1:02:15" for videos over one hour
+ * Display-only format; does not alter underlying numeric precision.
+ */
+export function formatDisplayTimestamp(sec: number): string {
+  if (isNaN(sec) || sec < 0) return '00:00';
+  const totalSec = Math.floor(sec);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  if (h > 0) {
+    return `${h}:${mm}:${ss}`;
+  }
+  return `${mm}:${ss}`;
+}
+
+/**
  * Formats duration into human readable form (e.g. "2h 15m 30s" or "22m 37s" or "45s")
  */
 export function formatDurationHuman(totalSec: number): string {

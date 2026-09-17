@@ -12,7 +12,7 @@ import {
   hexToAssColor,
   opacityToAssAlpha,
 } from '../src/caption/captionColors';
-import { sanitizeCaptionConfig } from '../src/caption/captionValidation';
+import { sanitizeCaptionConfig, sanitizeWordTimestamps } from '../src/caption/captionValidation';
 import {
   computeCaptionGroupLayout,
   getActiveWordAnimationSpec,
@@ -123,9 +123,12 @@ export function generateAssSubtitleFile(
     config.textShadowSize <= 0 ? 'FF' : '00'
   );
 
+  // Sanitize words with unwanted-character removal and boundary checks
+  const safeWords = sanitizeWordTimestamps(clipWords);
+
   // Group words based on user-configured maxWords
   const groups = groupWordsForCaption(
-    clipWords,
+    safeWords,
     config.maxWordsPerGroup,
     config.wrapWidthPercent,
     baseFontSize,

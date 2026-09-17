@@ -671,39 +671,16 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
                     <span className="font-bold text-[var(--text-muted)] uppercase tracking-wider">
                       OUTPUT FILE LOCATION
                     </span>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <button
-                        id="btn-copy-output-path"
-                        type="button"
-                        onClick={() => handleCopyText(meta.fullPath, 'path')}
-                        className="text-[var(--brand-text)] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
-                      >
-                        {copiedField === 'path' ? (
-                          <>
-                            <Check className="w-3 h-3 text-[var(--success-text)]" />
-                            <span className="text-[var(--success-text)]">Copied Path</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Copy Path</span>
-                          </>
-                        )}
-                      </button>
-
-                      <span className="text-[var(--border-default)]">•</span>
-
-                      <button
-                        id="btn-browse-output-folder"
-                        type="button"
-                        onClick={() => handleOpenOutputFolder(meta.fullPath)}
-                        className="text-[var(--brand-text)] hover:underline flex items-center gap-1.5 font-semibold cursor-pointer"
-                        title="Open output folder in Windows Explorer"
-                      >
-                        <FolderOpen className="w-3.5 h-3.5" />
-                        <span>Browse Folder</span>
-                      </button>
-                    </div>
+                    <button
+                      id="btn-browse-output-folder"
+                      type="button"
+                      onClick={() => handleOpenOutputFolder(meta.fullPath)}
+                      className="text-[var(--brand-text)] hover:underline flex items-center gap-1.5 font-semibold cursor-pointer shrink-0"
+                      title="Open output folder in Windows Explorer"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      <span>Browse Folder</span>
+                    </button>
                   </div>
                   <div className="font-mono text-xs text-[var(--text-primary)] break-all select-all bg-[var(--surface-primary)] p-2 rounded border border-[var(--border-default)]">
                     {meta.fullPath || meta.outputFilename || 'Saved to project output folder'}
@@ -756,12 +733,12 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
                         {copiedField === 'hashtags' ? (
                           <>
                             <Check className="w-3 h-3 text-[var(--success-text)]" />
-                            <span className="text-[var(--success-text)]">Copied All</span>
+                            <span className="text-[var(--success-text)]">Copied</span>
                           </>
                         ) : (
                           <>
                             <Copy className="w-3 h-3" />
-                            <span>Copy All Tags</span>
+                            <span>Copy</span>
                           </>
                         )}
                       </button>
