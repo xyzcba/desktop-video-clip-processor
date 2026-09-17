@@ -6,7 +6,7 @@
  * models/Xenova/whisper-tiny.en), and creates a native Windows desktop window.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker, shell } = require('electron');
 const path = require('path');
 const http = require('http');
 const net = require('net');
@@ -27,6 +27,18 @@ ipcMain.handle('select-folder', async () => {
     return null;
   }
   return result.filePaths[0];
+});
+
+// Handle opening output directory in Windows Explorer
+ipcMain.handle('open-folder', async (event, folderPath) => {
+  if (!folderPath) return false;
+  try {
+    await shell.openPath(folderPath);
+    return true;
+  } catch (err) {
+    console.error('Failed to open folder:', err);
+    return false;
+  }
 });
 
 /**

@@ -513,14 +513,20 @@ app.get('/api/media/stream/:sessionId', (req, res) => {
 });
 
 // 19. Rendered Clip Stream (for previewing completed 9:16 vertical clips)
-app.get('/api/media/clip-stream/:sessionId/:clipId', (req, res) => {
+app.get(['/api/media/clip-stream/:sessionId/:clipId', '/api/media/stream-clip/:sessionId/:clipId'], (req, res) => {
   const session = getSession(req.params.sessionId);
   if (!session) {
     res.status(404).send('Session not found');
     return;
   }
 
-  const job = session.clipJobs.find((j) => String(j.clipId) === String(req.params.clipId));
+  const target = req.params.clipId;
+  const job = session.clipJobs.find(
+    (j) =>
+      String(j.clipId) === String(target) ||
+      j.outputFilename === target ||
+      (j.outputPath && path.basename(j.outputPath) === target)
+  );
   if (!job || !job.outputPath || !fs.existsSync(job.outputPath)) {
     res.status(404).send('Clip file not found');
     return;
@@ -555,7 +561,42 @@ app.get('/api/media/clip-stream/:sessionId/:clipId', (req, res) => {
   }
 });
 
-// 20. Session Temp Cleanup
+// 20. Open Output Folder in Explorer
+app.post('/api/system/open-folder', (req, res) => {
+  const folderPath = req.body.folderPath;
+  if (!folderPath) {
+    res.status(400).json({ error: 'folderPath is required' });
+    return;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { shell } = require('electron');
+    if (shell && typeof shell.openPath === 'function') {
+      shell.openPath(folderPath);
+      res.json({ success: true, method: 'electron.shell' });
+      return;
+    }
+  } catch {
+    // electron not in runtime
+  }
+
+  try {
+    const { exec } = require('child_process');
+    if (process.platform === 'win32') {
+      exec(`explorer.exe "${folderPath.replace(/\//g, '\\')}"`);
+    } else if (process.platform === 'darwin') {
+      exec(`open "${folderPath}"`);
+    } else {
+      exec(`xdg-open "${folderPath}"`);
+    }
+    res.json({ success: true, method: 'shell' });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to open folder' });
+  }
+});
+
+// 21. Session Temp Cleanup
 const handleCleanupSession = (req: express.Request, res: express.Response) => {
   try {
     const sessionId = req.params.sessionId || req.body.sessionId;

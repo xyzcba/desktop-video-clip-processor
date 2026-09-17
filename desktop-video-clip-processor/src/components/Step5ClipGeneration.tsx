@@ -17,6 +17,7 @@ import {
   Tag,
   X,
   Folder,
+  FolderOpen,
 } from 'lucide-react';
 import {
   ProjectSession,
@@ -128,6 +129,39 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
     setTimeout(() => {
       setCopiedField((curr) => (curr === fieldName ? null : curr));
     }, 2000);
+  };
+
+  const handleOpenOutputFolder = async (filePathOrDir?: string) => {
+    let folderToOpen = session.outputDir || '';
+    if (!folderToOpen && filePathOrDir) {
+      const lastSlash = Math.max(filePathOrDir.lastIndexOf('/'), filePathOrDir.lastIndexOf('\\'));
+      if (lastSlash > 0) {
+        folderToOpen = filePathOrDir.substring(0, lastSlash);
+      } else {
+        folderToOpen = filePathOrDir;
+      }
+    }
+
+    // 1. If running in Electron, use the IPC handler
+    if (typeof (window as any).electronAPI?.openFolder === 'function') {
+      try {
+        const success = await (window as any).electronAPI.openFolder(folderToOpen);
+        if (success) return;
+      } catch (err) {
+        console.warn('Electron openFolder failed, falling back to server API:', err);
+      }
+    }
+
+    // 2. Call backend server endpoint
+    try {
+      await fetch('/api/system/open-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderPath: folderToOpen }),
+      });
+    } catch (err) {
+      console.warn('Failed to open output folder:', err);
+    }
   };
 
   const getClipMetadata = (clip: ClipJob) => {
@@ -330,12 +364,14 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
             {/* Vertical 9:16 Video Frame Container */}
             <div className="relative w-[210px] sm:w-[240px] h-[373px] sm:h-[426px] bg-black rounded-xl overflow-hidden border-2 border-[var(--border-strong)] shadow-lg flex items-center justify-center">
               {activeClip ? (
-                activeClip.status === 'completed' && activeClip.outputFilename ? (
+                activeClip.status === 'completed' && (activeClip.outputPath || activeClip.outputFilename) ? (
                   <video
-                    key={activeClip.outputFilename}
+                    key={`completed-clip-${activeClip.clipId}`}
                     controls
+                    playsInline
+                    preload="auto"
                     className="w-full h-full object-contain"
-                    src={`/api/media/stream-clip/${session.sessionId}/${encodeURIComponent(activeClip.outputFilename)}`}
+                    src={`/api/media/clip-stream/${session.sessionId}/${encodeURIComponent(activeClip.clipId)}`}
                   />
                 ) : (
                   <div className="relative w-full h-full flex flex-col items-center justify-center bg-zinc-950">
@@ -631,28 +667,43 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
               <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto text-xs">
                 {/* File Location on Local Disk */}
                 <div className="ws-well p-3 rounded-lg space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
-                      <Folder className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
-                      <span>Output File Location</span>
+                  <div className="flex items-center justify-between gap-3 text-[11px] pb-1">
+                    <span className="font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      OUTPUT FILE LOCATION
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyText(meta.fullPath, 'path')}
-                      className="text-[var(--brand-text)] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
-                    >
-                      {copiedField === 'path' ? (
-                        <>
-                          <Check className="w-3 h-3 text-[var(--success-text)]" />
-                          <span className="text-[var(--success-text)]">Copied Path</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copy Path</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        id="btn-copy-output-path"
+                        type="button"
+                        onClick={() => handleCopyText(meta.fullPath, 'path')}
+                        className="text-[var(--brand-text)] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                      >
+                        {copiedField === 'path' ? (
+                          <>
+                            <Check className="w-3 h-3 text-[var(--success-text)]" />
+                            <span className="text-[var(--success-text)]">Copied Path</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy Path</span>
+                          </>
+                        )}
+                      </button>
+
+                      <span className="text-[var(--border-default)]">•</span>
+
+                      <button
+                        id="btn-browse-output-folder"
+                        type="button"
+                        onClick={() => handleOpenOutputFolder(meta.fullPath)}
+                        className="text-[var(--brand-text)] hover:underline flex items-center gap-1.5 font-semibold cursor-pointer"
+                        title="Open output folder in Windows Explorer"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span>Browse Folder</span>
+                      </button>
+                    </div>
                   </div>
                   <div className="font-mono text-xs text-[var(--text-primary)] break-all select-all bg-[var(--surface-primary)] p-2 rounded border border-[var(--border-default)]">
                     {meta.fullPath || meta.outputFilename || 'Saved to project output folder'}
@@ -741,10 +792,30 @@ export const Step5ClipGeneration: React.FC<Step5ClipGenerationProps> = ({
                 {/* Keywords */}
                 {meta.keywords.length > 0 && (
                   <div className="space-y-1.5">
-                    <span className="font-bold text-[var(--text-muted)] text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
-                      <span>Keywords</span>
-                    </span>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
+                        <span>Keywords ({meta.keywords.length})</span>
+                      </span>
+                      <button
+                        id="btn-copy-keywords"
+                        type="button"
+                        onClick={() => handleCopyText(meta.keywords.join(', '), 'keywords')}
+                        className="text-[var(--brand-text)] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                      >
+                        {copiedField === 'keywords' ? (
+                          <>
+                            <Check className="w-3 h-3 text-[var(--success-text)]" />
+                            <span className="text-[var(--success-text)]">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {meta.keywords.map((kw, i) => (
                         <span
