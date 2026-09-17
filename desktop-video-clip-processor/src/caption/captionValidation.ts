@@ -29,19 +29,75 @@ export const TEMPORARY_UNWANTED_CAPTION_CHARACTERS: { char: string; replaceWith:
 ];
 
 /**
- * Applies the explicit unwanted-character replacement list to caption text.
- * Deterministic: only removes characters explicitly included in the unwanted list,
- * preserving normal readable words, contractions, and punctuation.
+ * Applies centralized temporary caption cleanup to text before visual rendering.
+ *
+ * Rules:
+ * A. Remove parenthesized content: (...) including the parentheses.
+ *    Examples:
+ *    "(cheering) THAT ladies and gentlemen" -> "THAT ladies and gentlemen"
+ *    "(applause) This is crazy!" -> "This is crazy!"
+ *    "(background music) Look at this." -> "Look at this"
+ *
+ * B. Remove bracketed content: [...] including the brackets.
+ *    Examples:
+ *    "[cheering] THAT ladies and gentlemen" -> "THAT ladies and gentlemen"
+ *    "[Music] This is crazy!" -> "This is crazy!"
+ *    "[background noise] Look at this." -> "Look at this"
+ *
+ * C. Remove commas: ,
+ *    Example:
+ *    "THAT, ladies, and gentlemen" -> "THAT ladies and gentlemen"
+ *
+ * D. Remove periods: .
+ *    Example:
+ *    "The truth. is simple." -> "The truth is simple"
+ *
+ * Preserves useful punctuation:
+ *    ' (apostrophes)
+ *    ? (question marks)
+ *    ! (exclamation marks)
+ *    : (colons)
+ *    ; (semicolons)
+ *
+ * Examples:
+ *    "DON'T DO THIS!" must remain "DON'T DO THIS!"
+ *    "WHAT?!" must remain "WHAT?!"
+ *    "WAIT: THIS IS CRAZY!" must remain "WAIT: THIS IS CRAZY!"
+ *
+ * Whitespace cleanup:
+ *    Collapses repeated spaces into a single space and trims leading/trailing whitespace.
+ *    Preserves exact casing and words without AI paraphrasing.
  */
 export function sanitizeCaptionText(text: string): string {
   if (!text) return '';
   let result = text;
+
+  // 1. Remove explicit unwanted characters (music notes, zero-width spaces, corrupt encoding)
   for (const item of TEMPORARY_UNWANTED_CAPTION_CHARACTERS) {
     if (result.includes(item.char)) {
       result = result.split(item.char).join(item.replaceWith);
     }
   }
-  return result.trim();
+
+  // 2. Remove parenthesized content: (...) including parentheses
+  result = result.replace(/\([^)]*\)/g, '');
+
+  // 3. Remove bracketed content: [...] including brackets
+  result = result.replace(/\[[^\]]*\]/g, '');
+
+  // 4. Remove any stray orphan parentheses or brackets that might remain
+  result = result.replace(/[()[\]]/g, '');
+
+  // 5. Remove commas
+  result = result.replace(/,/g, '');
+
+  // 6. Remove periods
+  result = result.replace(/\./g, '');
+
+  // 7. Collapse repeated whitespace into a single space and trim leading/trailing whitespace
+  result = result.replace(/\s+/g, ' ').trim();
+
+  return result;
 }
 
 /**
@@ -59,25 +115,77 @@ export function clampCaptionPosition(pos: CaptionPosition): CaptionPosition {
 }
 
 /**
- * Validates and sanitizes a sequence of WordTimestamps.
+ * Validates and sanitizes a sequence of WordTimestamps before caption rendering.
  * Ensures start is non-negative, end is strictly greater than start,
- * and applies the explicit unwanted-character filter to the word text before rendering.
+ * handles parenthesized and bracketed annotations that may span across words,
+ * and applies the centralized caption text sanitizer to each word.
  */
 export function sanitizeWordTimestamps(rawWords: WordTimestamp[]): WordTimestamp[] {
   if (!Array.isArray(rawWords)) return [];
 
-  return rawWords
-    .map((w) => {
-      const cleanWord = sanitizeCaptionText(w.word || '');
-      let start = Math.max(0, isNaN(w.start) ? 0 : w.start);
-      let end = Math.max(start + 0.05, isNaN(w.end) ? start + 0.3 : w.end);
-      return {
-        word: cleanWord,
-        start: Math.round(start * 1000) / 1000,
-        end: Math.round(end * 1000) / 1000,
-      };
-    })
-    .filter((w) => w.word.length > 0 && w.word !== '[BLANK_AUDIO]');
+  let inParen = false;
+  let inBracket = false;
+  const sanitized: WordTimestamp[] = [];
+
+  for (const w of rawWords) {
+    let wordStr = (w.word || '').trim();
+    if (!wordStr) continue;
+
+    // Handle cross-word parentheses if active
+    if (inParen) {
+      const closeIdx = wordStr.indexOf(')');
+      if (closeIdx !== -1) {
+        wordStr = wordStr.slice(closeIdx + 1);
+        inParen = false;
+      } else {
+        // Still inside multi-word parenthesized annotation: skip this word
+        continue;
+      }
+    }
+
+    // Handle cross-word brackets if active
+    if (inBracket) {
+      const closeIdx = wordStr.indexOf(']');
+      if (closeIdx !== -1) {
+        wordStr = wordStr.slice(closeIdx + 1);
+        inBracket = false;
+      } else {
+        // Still inside multi-word bracketed annotation: skip this word
+        continue;
+      }
+    }
+
+    // Remove any complete parenthesized or bracketed blocks within this token
+    wordStr = wordStr.replace(/\([^)]*\)/g, '');
+    wordStr = wordStr.replace(/\[[^\]]*\]/g, '');
+
+    // Check if an unclosed '(' begins in this word
+    const openParenIdx = wordStr.indexOf('(');
+    if (openParenIdx !== -1) {
+      wordStr = wordStr.slice(0, openParenIdx);
+      inParen = true;
+    }
+
+    // Check if an unclosed '[' begins in this word
+    const openBracketIdx = wordStr.indexOf('[');
+    if (openBracketIdx !== -1) {
+      wordStr = wordStr.slice(0, openBracketIdx);
+      inBracket = true;
+    }
+
+    const cleanWord = sanitizeCaptionText(wordStr);
+    if (!cleanWord || cleanWord === '[BLANK_AUDIO]') continue;
+
+    let start = Math.max(0, isNaN(w.start) ? 0 : w.start);
+    let end = Math.max(start + 0.05, isNaN(w.end) ? start + 0.3 : w.end);
+    sanitized.push({
+      word: cleanWord,
+      start: Math.round(start * 1000) / 1000,
+      end: Math.round(end * 1000) / 1000,
+    });
+  }
+
+  return sanitized;
 }
 
 /**
