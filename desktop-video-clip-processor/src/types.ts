@@ -134,8 +134,7 @@ export type AppStep =
   | 'video'
   | 'transcription'
   | 'viral_json'
-  | 'clip_generation'
-  | 'results';
+  | 'clip_generation';
 
 export type AppTheme = 'light' | 'semi-dark';
 

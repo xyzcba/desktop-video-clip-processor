@@ -38,7 +38,6 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
 
   // Folder configuration states
   const [currentOutputDir, setCurrentOutputDir] = useState<string>(session?.outputDir || '');
-  const [isEditingFolder, setIsEditingFolder] = useState(false);
   const [folderSavedNotice, setFolderSavedNotice] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -139,7 +138,6 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
     const trimmed = newPath.trim();
     if (!trimmed) return;
     setCurrentOutputDir(trimmed);
-    setIsEditingFolder(false);
     if (onUpdateOutputDir) {
       onUpdateOutputDir(trimmed);
     }
@@ -456,91 +454,38 @@ export const Step1Video: React.FC<Step1VideoProps> = ({
                 </span>
               )}
             </div>
-            {!isEditingFolder ? (
-              <div
-                className="font-mono text-xs text-[var(--text-primary)] font-medium truncate select-all mt-0.5"
-                title={currentOutputDir || session?.outputDir || ''}
-              >
-                {currentOutputDir || session?.outputDir || 'Resolving default downloads folder...'}
-              </div>
-            ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveOutputDir(currentOutputDir);
-                }}
-                className="flex items-center gap-2 mt-1"
-              >
-                <input
-                  id="input-manual-output-folder"
-                  type="text"
-                  value={currentOutputDir}
-                  onChange={(e) => setCurrentOutputDir(e.target.value)}
-                  placeholder="C:\Users\username\Downloads\ViralClips"
-                  className="ws-input font-mono text-xs py-1 px-2.5 h-7 w-64 sm:w-80"
-                  autoFocus
-                />
-                <button
-                  id="btn-save-manual-output-folder"
-                  type="submit"
-                  className="ws-btn-primary text-xs py-1 px-3 h-7"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentOutputDir(session?.outputDir || '');
-                    setIsEditingFolder(false);
-                  }}
-                  className="ws-btn-secondary text-xs py-1 px-2.5 h-7"
-                >
-                  Cancel
-                </button>
-              </form>
-            )}
+            <div
+              className="font-mono text-xs text-[var(--text-primary)] font-medium truncate select-all mt-0.5"
+              title={currentOutputDir || session?.outputDir || ''}
+            >
+              {currentOutputDir || session?.outputDir || 'Resolving default output folder...'}
+            </div>
           </div>
         </div>
 
-        {!isEditingFolder && (
-          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-            <button
-              id="btn-browse-output-folder"
-              type="button"
-              onClick={handleBrowseNativeFolder}
-              className="ws-btn-secondary text-xs py-1 px-2.5"
-              title="Open folder selection dialog"
-            >
-              <FolderOpen className="w-3 h-3 text-[var(--brand-primary)]" />
-              <span>Browse...</span>
-            </button>
-            <button
-              id="btn-toggle-edit-output-path"
-              type="button"
-              onClick={() => setIsEditingFolder(true)}
-              className="ws-btn-secondary text-xs py-1 px-2"
-              title="Manually edit destination path"
-            >
-              Edit
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+          <button
+            id="btn-browse-output-folder"
+            type="button"
+            onClick={handleBrowseNativeFolder}
+            className="ws-btn-secondary text-xs py-1.5 px-3 gap-1.5"
+            title="Select destination folder"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
+            <span>Browse...</span>
+          </button>
+        </div>
       </div>
 
       {/* Primary Action Button: Start Transcription (Progressive Reveal when video is loaded) */}
       {videoMeta && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-          <div className="text-xs text-[var(--text-muted)] flex items-center gap-1.5 self-start sm:self-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-solid)]"></span>
-            <span>Local Whisper will extract audio and transcribe dialogue offline</span>
-          </div>
-
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
           <button
             id="btn-start-transcription"
             type="button"
             onClick={() => onStartTranscription()}
             disabled={isLoading || !videoMeta}
-            className="ws-btn-primary group py-2.5 px-6 text-sm font-semibold tracking-wide shadow-sm hover:shadow active:scale-[0.98] transition-all duration-150 self-end sm:self-auto cursor-pointer"
+            className="ws-btn-primary group py-2.5 px-6 text-xs font-semibold tracking-wide shadow-sm hover:shadow active:scale-[0.98] transition-all duration-150 self-end sm:self-auto cursor-pointer"
           >
             <span>START TRANSCRIPTION</span>
             <ArrowRight className="w-4 h-4 transition-transform duration-150 group-hover:translate-x-1" />

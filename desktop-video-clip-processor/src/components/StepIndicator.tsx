@@ -4,7 +4,6 @@ import {
   Mic,
   Sparkles,
   Scissors,
-  CheckCircle2,
   Check,
 } from 'lucide-react';
 import { AppStep, ProjectSession } from '../types';
@@ -23,7 +22,7 @@ interface StepItem {
   icon: React.ElementType;
 }
 
-// 5-Stage Rush Creative Workstation Pipeline
+// 4-Stage Rush Creative Workstation Pipeline
 const STEPS: StepItem[] = [
   {
     key: 'video',
@@ -50,15 +49,8 @@ const STEPS: StepItem[] = [
     key: 'clip_generation',
     number: 4,
     label: 'CLIP GENERATION',
-    sublabel: 'Render Clips',
+    sublabel: 'Render Vertical 9:16',
     icon: Scissors,
-  },
-  {
-    key: 'results',
-    number: 5,
-    label: 'RESULTS',
-    sublabel: 'Review & Export',
-    icon: CheckCircle2,
   },
 ];
 
@@ -84,14 +76,12 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
       return 'disabled';
     }
     if (stepKey === 'clip_generation') {
-      const hasCompletedClips = session?.clipJobs?.some((j) => j.status === 'completed');
-      if (hasCompletedClips) return 'completed';
+      const allDone =
+        session?.clipJobs &&
+        session.clipJobs.length > 0 &&
+        session.clipJobs.every((j) => j.status === 'completed' || j.status === 'failed');
+      if (allDone) return 'completed';
       if (session?.clipJobs && session.clipJobs.length > 0) return 'enabled';
-      return 'disabled';
-    }
-    if (stepKey === 'results') {
-      const hasCompletedClips = session?.clipJobs?.some((j) => j.status === 'completed');
-      if (hasCompletedClips) return 'enabled';
       return 'disabled';
     }
 

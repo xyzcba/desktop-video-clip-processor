@@ -6,7 +6,6 @@ import { Step1Video } from './components/Step1Video';
 import { Step2AudioWhisper } from './components/Step2AudioWhisper';
 import { Step4ViralJson } from './components/Step4ViralJson';
 import { Step5ClipGeneration } from './components/Step5ClipGeneration';
-import { Step6Results } from './components/Step6Results';
 import { DesktopPackagingModal } from './components/DesktopPackagingModal';
 import { SystemInfoModal } from './components/SystemInfoModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -443,12 +442,7 @@ export default function App() {
     }
   };
 
-  // Step 5 -> Step 6: Proceed to Results
-  const handleProceedToResults = () => {
-    setCurrentStep('results');
-  };
-
-  // Step 6: Update output directory
+  // Update output directory
   const handleUpdateOutputDir = async (newDir: string) => {
     if (!session?.sessionId) return;
     setApiError(null);
@@ -600,14 +594,7 @@ export default function App() {
               session={session}
               onRetryClip={handleRetryClip}
               onCancelGeneration={handleCancelClipGeneration}
-              onProceedToResults={handleProceedToResults}
               onUpdateCaptionConfig={handleUpdateCaptionConfig}
-            />
-          )}
-
-          {currentStep === 'results' && session && (
-            <Step6Results
-              session={session}
             />
           )}
         </ErrorBoundary>

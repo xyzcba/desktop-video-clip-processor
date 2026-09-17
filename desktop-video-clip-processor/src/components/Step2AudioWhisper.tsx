@@ -151,15 +151,10 @@ export const Step2AudioWhisper: React.FC<Step2AudioWhisperProps> = ({
         </div>
 
         {isCompleted ? (
-          <button
-            id="btn-proceed-viral-json"
-            type="button"
-            onClick={onProceedToViralJson}
-            className="ws-btn-primary group py-2 px-5 text-xs font-semibold tracking-wide shadow-xs hover:shadow active:scale-[0.98] transition-all duration-150 cursor-pointer self-start sm:self-auto"
-          >
-            <span>CONTINUE TO AI HIGHLIGHTS</span>
-            <ArrowRight className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-1" />
-          </button>
+          <div className="flex items-center gap-1.5 text-xs text-[var(--success-text)] font-semibold self-start sm:self-auto">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Ready for AI Highlights</span>
+          </div>
         ) : isTranscribing ? (
           <div className="flex items-center gap-2 text-xs text-[var(--brand-text)] font-semibold self-start sm:self-auto">
             <span className="relative flex h-2 w-2">
@@ -352,14 +347,14 @@ export const Step2AudioWhisper: React.FC<Step2AudioWhisperProps> = ({
           {/* Transcript Search and Format Header Bar */}
           <div className="p-3.5 border-b border-[var(--border-default)] flex flex-col sm:flex-row items-center justify-between gap-3 bg-[var(--surface-primary)]">
             <div className="relative w-full sm:w-80">
-              <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="input-search-transcript"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search transcript speech..."
-                className="w-full ws-input pl-8 py-1 text-xs"
+                className="w-full ws-input pl-8 py-1.5 h-8 text-xs"
               />
             </div>
 
@@ -467,10 +462,6 @@ export const Step2AudioWhisper: React.FC<Step2AudioWhisperProps> = ({
                                 <Play className="w-2.5 h-2.5" />
                                 <span>{formatSrtTime(item.globalStartSec)}</span>
                               </button>
-                              <span className="text-[var(--text-muted)] text-[10px]">→</span>
-                              <span className="font-mono text-[11px] text-[var(--text-muted)]">
-                                {formatSrtTime(item.globalEndSec)}
-                              </span>
                             </div>
                             <p className="text-[var(--text-primary)] leading-relaxed pt-0.5">
                               {item.text}
